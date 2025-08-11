@@ -13,7 +13,7 @@
 #include <iostream>
 #include <array>
 
-#define BUFSIZE 16384
+#define BUFSIZE 65536 // 16384
 
 class JuliaProcess {
 
@@ -45,7 +45,28 @@ class JuliaProcess {
 
     }
 
+
+
 public:
+
+    ~JuliaProcess() {
+        // Close handles to the child process and its primary thread.
+        // Some applications might keep these handles to monitor the status
+        // of the child process, for example.
+        TerminateProcess(process_information.hProcess, 0);
+
+        WaitForSingleObject(process_information.hProcess, 500);
+
+        CloseHandle(process_information.hProcess);
+        CloseHandle(process_information.hThread);
+
+        // Close handles to the stdin and stdout pipes no longer needed by the child process.
+        // If they are not explicitly closed, there is no way to recognize that the child process has ended.
+
+        CloseHandle(h_stdin[1]);
+        CloseHandle(h_stdout[0]);
+        CloseHandle(h_stderr[0]);
+    }
 
     void write(const uint8_t* buf, const size_t nb) {
         size_t bw = std::min(outputstream.buffer.size() - outputstream.available, nb);
@@ -155,21 +176,21 @@ public:
         std::array<HANDLE, 2> h_stdout{};
         std::array<HANDLE, 2> h_stderr{};
 
-        if ( ! CreatePipe(&h_stdin[0], &h_stdin[1], &saAttr, 16384*4) ) {
+        if ( ! CreatePipe(&h_stdin[0], &h_stdin[1], &saAttr, 4*BUFSIZE) ) {
             // ErrorExit(TEXT("StdoutRd CreatePipe"));
         }
         if ( ! SetHandleInformation(&h_stdin[1], HANDLE_FLAG_INHERIT, 0) ) {
             // ErrorExit(TEXT("Stdout SetHandleInformation"));
         }
 
-        if ( ! CreatePipe(&h_stdout[0], &h_stdout[1], &saAttr, 16384*4) ) {
+        if ( ! CreatePipe(&h_stdout[0], &h_stdout[1], &saAttr, 4*BUFSIZE) ) {
             // ErrorExit(TEXT("StdoutRd CreatePipe"));
         }
         if ( ! SetHandleInformation(&h_stdout[0], HANDLE_FLAG_INHERIT, 0) ) {
             // ErrorExit(TEXT("Stdout SetHandleInformation"));
         }
 
-        if ( ! CreatePipe(&h_stderr[0], &h_stderr[1], &saAttr, 16384*4) ) {
+        if ( ! CreatePipe(&h_stderr[0], &h_stderr[1], &saAttr, 4*BUFSIZE) ) {
             // ErrorExit(TEXT("StdoutRd CreatePipe"));
         }
         if ( ! SetHandleInformation(&h_stderr[0], HANDLE_FLAG_INHERIT, 0) ) {

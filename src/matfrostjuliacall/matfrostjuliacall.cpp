@@ -23,6 +23,7 @@ using matlab::mex::ArgumentList;
 //     #include "matfrost.h"
 // }
 
+#define EXPERIMENT_SIZE 1000000
 
 
 class MexFunction : public matlab::mex::Function {
@@ -44,10 +45,13 @@ private:
     // MATFrostArray (*juliacall)(MATFrostArray) = nullptr;
     // void (*freematfrostmemory)(MATFrostArray) = nullptr;
     // std::string julia_environment_path;
-
+    JuliaProcess jp = JuliaProcess::spawn(R"(C:\Users\jbelier\.julia\juliaup\julia-1.12.0-rc1+0.x64.w64.mingw32\bin\julia.exe)",
+       R"(C:\Users\jbelier\Documents\JuliaEnvs\MATFrostDev)");
 
 public:
     MexFunction() {
+        std:: cout << "Spawning";
+
         // matlabPtr = getEngine();
         //
         // std::unique_lock<std::mutex> lk(mtx_jl);
@@ -60,7 +64,12 @@ public:
 
     }
 
-    virtual ~MexFunction(){
+    ~MexFunction() {
+        matlab::data::ArrayFactory factory;
+        std::shared_ptr<matlab::engine::MATLABEngine> matlabPtr = getEngine();
+        matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
+                  ({ factory.createScalar(("###################################\nClosing Matfrost\n###################################\n"))}));
+
         //
         // matlab::data::ArrayFactory factory;
         //
@@ -69,7 +78,59 @@ public:
     }
 
     void operator()(ArgumentList outputs, ArgumentList inputs) {
-        main();
+
+        matlab::data::ArrayFactory factory;
+        std::shared_ptr<matlab::engine::MATLABEngine> matlabPtr = getEngine();
+
+
+
+
+
+        std:: cout << "Before alloc";
+        std::shared_ptr<std::array<int64_t, EXPERIMENT_SIZE>> buf = std::make_shared<std::array<int64_t, EXPERIMENT_SIZE>>();
+
+
+
+        matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
+            ({ factory.createScalar(("###################################\nStart setting \n###################################\n"))}));
+        std:: cout << "Before alloc";
+
+        std::array<int64_t, EXPERIMENT_SIZE>& bufp = *buf;
+        for (size_t i = 0; i < EXPERIMENT_SIZE; i++) {
+            bufp[i] = i;
+        }
+
+        matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
+            ({ factory.createScalar(("###################################\nStart writing \n###################################\n"))}));
+        std:: cout << "Writing" << std::endl;
+        jp.write((uint8_t*) &bufp[0], 8 * EXPERIMENT_SIZE);
+        jp.flush();
+
+        matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
+            ({ factory.createScalar(("###################################\nFinished writing \n###################################\n"))}));
+
+        std:: cout << "Finished writing" << std::endl;
+
+        int64_t result = 0;
+        jp.read((uint8_t*) &result, 8);
+
+
+        // int64_t* el = (int64_t*) &buf[0];
+        //
+        // std::cout << el[432] << std::endl;
+        // std::cout << el[5000] << std::endl;
+        //
+        // int64_t sum = 0;
+        //
+        // for (size_t i = 0; i < 5000; i++) {
+        //    sum+= el[i];
+        // }
+        // std::cout << "Final result: " << result << std::endl;
+
+        // result = 46744073709551615;
+        matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
+            ({ factory.createScalar(("###################################\nMATFrost error: " + std::to_string(result) + "\n###################################\n"))}));
+        // main();
         // // lk_mex will sequentialize Julia jobs in case of concurrent MEX-calls.
         // std::lock_guard<std::mutex> lk_mex(mtx_mex);
         // {
