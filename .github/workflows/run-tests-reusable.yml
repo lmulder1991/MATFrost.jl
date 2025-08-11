@@ -13,11 +13,17 @@ on:
         description: "MATLAB version"
         default: "R2022b"
         type: string
-      julia-version:
+      # julia-version:
+      #   required: true
+      #   description: "Julia version"
+      #   default: "1.10"
+      #   type: string
+      mex-recompile:
         required: true
-        description: "Julia version"
-        default: "1.10"
-        type: string
+        description: "Recompile MEX binary"
+        type: boolean
+        default: true
+
 
 
 env:
@@ -26,7 +32,7 @@ env:
 jobs:
   test:
     runs-on:  ${{ inputs.os }}
-    name: ${{ inputs.os }}-${{ inputs.matlab-version }}-${{ inputs.julia-version }}
+    name: ${{ inputs.os }}-${{ inputs.matlab-version }}-recompile-${{ inputs.mex-recompile }}
     steps:
 
       - name: Configure compatible linux GCC compiler for MATLAB.
@@ -43,34 +49,53 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4     
 
+      - uses: msys2/setup-msys2@v2
+        if: ${{ inputs.mex-recompile && startsWith(inputs.os , 'windows') }}
+        id: msys2
+        with:
+          msystem: UCRT64         
+          update: true
+          install: mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-toolchain
+
       - uses: julia-actions/install-juliaup@v2
         with:
-          channel: ${{ inputs.julia-version }}
+          channel: '1.12'
 
-      - name: Set up MATLAB on Unix/Mac
+      - name: Add remaining Julia versions to test
+        run: |
+          juliaup add 1.7
+          juliaup add 1.8
+          juliaup add 1.9
+          juliaup add 1.10
+          juliaup add 1.11
+      
+      - name: Configure precompiled MEX-artifacts
+        if: ${{ !inputs.mex-recompile }}
+        run: |
+          julia --project="." -e "import Pkg ; Pkg.instantiate() ; using MATFrost ; foreach(fp -> cp(joinpath(MATFrost.mexbinaryartifact(), fp), joinpath(ARGS[1], fp)), readdir(MATFrost.mexbinaryartifact()) )" "src/matlab/private"
+          
+
+      - name: Set up MATLAB
         uses: matlab-actions/setup-matlab@v2
-        if: ${{ !contains( inputs.os, 'windows') }}
         with:
           release: ${{ inputs.matlab-version }}
           cache: true
-
-      - name: Set up MATLAB on Windows
-        uses: matlab-actions/setup-matlab@v2
-        if: ${{ startsWith(inputs.os, 'windows') }}
-        with:
-          release: ${{ inputs.matlab-version }}
-          cache: true
-          products: >
-            ${{ contains(inputs.matlab-version, '2024') && 'MATLAB_Support_for_MinGW-w64_C/C++/Fortran_Compiler' || 'MATLAB_Support_for_MinGW-w64_C/C++_Compiler' }}
-        
-
        
+      - name: Build MATFrost MEX
+        uses: matlab-actions/run-command@v2
+        if: ${{ inputs.mex-recompile && startsWith(inputs.os , 'windows')}}
+        env:
+          # JULIA_VERSION: ${{ inputs.julia-version }}
+          MW_MINGW64_LOC: ${{ steps.msys2.outputs.msys2-location }}\ucrt64
+        with:
+          command: addpath(genpath("src")) ; matfrostmake() ; copyfile("src/matfrostjuliacall/bin/*", "src/matlab/private")
+        
       - name: Run tests
         uses: matlab-actions/run-tests@v2
-        env:
-          JULIA_VERSION: ${{ inputs.julia-version }}
+        # env:
+        #   JULIA_VERSION: ${{ inputs.julia-version }}
         with:
-          source-folder: 'src/matlab'
+          source-folder: 'src'
           select-by-folder: 'test'
           strict: false
           test-results-junit: test-reults/results.xml
@@ -81,4 +106,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with: 
           path: test-reults
-          name: results-${{ inputs.os }}-${{ inputs.matlab-version }}-${{ inputs.julia-version }}
+          name: results-${{ inputs.os }}-${{ inputs.matlab-version }}

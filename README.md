@@ -1,9 +1,12 @@
-![MATLAB versions](https://img.shields.io/badge/MATLAB-R2022b-blue.svg)
+![MATLAB versions](https://img.shields.io/badge/MATLAB-R2021b+-blue.svg)
 ![Julia support](https://img.shields.io/badge/Julia%20-v1.7+-purple)
 
 [![Windows](https://github.com/ASML-Labs/MATFrost.jl/actions/workflows/run-tests.yml/badge.svg?branch=main)](https://github.com/ASML-Labs/MATFrost.jl/actions/workflows/run-tests.yml)
 <!-- [![windows](https://github.com/ASML-Labs/MATFrost.jl/actions/workflows/run-tests-windows.yml/badge.svg)](https://github.com/ASML-Labs/MATFrost.jl/actions/workflows/run-tests-windows.yml) -->
 <!-- [![ubuntu](https://github.com/ASML-Labs/MATFrost.jl/actions/workflows/run-tests-ubuntu.yml/badge.svg)](https://github.com/ASML-Labs/MATFrost.jl/actions/workflows/run-tests-ubuntu.yml) -->
+
+> [!IMPORTANT]
+> Linux support in development. New revision will run Julia completely isolated into its own process, thereby preventing any library collisions.
 
 
 # MATFrost.jl - Embedding Julia in MATLAB
@@ -25,108 +28,53 @@ Linux not supported at this point. Default library `libunwind.so` bundled with M
 # Quick start 🚀
 ```matlab
 % MATLAB
-system('julia -e "import Pkg ; Pkg.generate(""MATFrostHelloWorld"") ; Pkg.activate(""./MATFrostHelloWorld"") ; Pkg.add(name=""MATFrost"")" ; Pkg.instantiate()');
-   % Generate a MATFrost Julia project and add MATFrost.
+system('julia -e "import Pkg ; Pkg.add(ARGS[1]) ; using MATFrost ; MATFrost.install()" "MATFrost"');
+   % Install MATLAB bindings. This will install @matfrostjulia inside current working directory.
 
-system('julia --project="./MATFrostHelloWorld" -e "import MATFrost ; MATFrost.install()"');
-   % Generate MATLAB bindings for MATFrostHelloWorld
+jl = matfrostjulia(); 
+   % Spawn a matfrostjulia server running JULIA
 
-writelines(...
-   "module MATFrostHelloWorld" + newline + ...
-      "matfrost_hello_world()=""Hello Julia! :)""" + newline + ...
-   "end", ...
-   fullfile("MATFrostHelloWorld", "src", "MATFrostHelloWorld.jl"))
-   % Add simple hello_world function
+jl.MATFrost.Example.hello_world() 
+   % > 'Hello Julia! :)'
 
-mjl = MATFrostHelloWorld(...
-    instantiate=true); 
-   % Spawn a matfrostjulia process running JULIA
-
-mjl.MATFrostHelloWorld.matfrost_hello_world() 
-   % 'Hello Julia! :)'
+jl.MATFrost.Example.multiply_scalar_vector_f64(5.0, [1.0; 4.0; 9.0; 16.0]) 
+   % > [5.0; 20.0; 45.0; 80.0]
 ```
 
+# API: Start MATFrost server 
 
-For more examples see the examples folder. 
-
-# Workflow
-In this section we would like to explain the workflow of integrating Julia functionality into MATLAB using MATFrost. 
-
-1. Generate a new Julia environment. 
-   ```
-   (@v1.10) pkg> generate MATFrostWorkflowExample
-      Generating  project MATFrostWorkflowExample:
-        MATFrostWorkflowExample/Project.toml
-        MATFrostWorkflowExample/src/MATFrostWorkflowExample.jl
-   ```
-2. Activate environment
-   ```
-   (@v1.10) pkg> activate ./MATFrostWorkflowExample
-   ```
-3. Add MATFrost dependency
-   ```
-   (MATFrostWorkflowExample) pkg> add MATFrost
-   ```
-4. Generate MATLAB bindings. This will create a new class folder `@MATFrostWorkflowExample` acting as the MATLAB entrypoint.
-   ```julia
-   using MATFrost
-   MATFrost.install()
-   ```
-5. Edit `MATFrostWorkflowExample/src/MATFrostWorkflowExample.jl`
-   ```julia
-   module MATFrostWorkflowExample
-
-   broadcast_multiply(c::Float64, v::Vector{Float64}) = c.*v
-
-   end # module MATFrostWorkflowExample
-   ```
-6. Construct a `MATFrostWorkflowExample` object. This will spawn a Julia process (using Juliaup channel +1.10) set to `MATFrostWorkflowExample` environment.
+## Select Julia binary
+* Option 1 (recommended): Use Juliaup and select by version:
    ```matlab
-   mjl = MATFrostWorkflowExample(...
-      version = "1.10");
-   ```
-7. Call `broadcast_multiply`. This will call function `broadcast_multiply` in package `MATFrostWorkflowExample` of environment `MATFrostWorkflowExample`.
-   ```matlab
-   mjl.MATFrostWorkflowExample.broadcast_multiply(3.0, [1.0; 2.0; 3.0]) % [3.0; 6.0; 9.0]
-   ``` 
-
-
-# API
-
-## Construct MATFrost object
-Constructing a MATFrost object, which from now on we call `MATFrostHelloWorld`, will spawn a new process with Julia loaded. The Julia binaries are specified in the constructor. Three options are given to locate the Julia binaries.
-
-* Option 1 (recommended): Julia version to link to Julia binaries - requires Juliaup:
-   ```matlab
-   mjl = MATFrostHelloWorld(...
-      version = "1.10");                   % Julia version. (Accepted values are Juliaup channels)
+   jl = matfrostjulia(version="1.10");                   
+      % Julia version. (Accepted values are Juliaup channels)
    ```
 * Option 2: Julia binary directory:
    ```matlab
-   mjl = MATFrostHelloWorld(...
-      bindir = <bindir>);                  % Directory containing Julia binaries
+   jl = matfrostjulia(bindir="<bindir>");                           
    ```
 * Option 3: Based on Julia configured in PATH
    ```matlab
-   mjl = MATFrostHelloWorld();    % Directory containing Julia environment.
+   jl = matfrostjulia();                              
    ```
 
-### Option: Instantiate
-An additional option instantiate will resolve project environment at construction of `MATFrostHelloWorld`. This will call `Pkg.instantiate()`. 
+## Select Julia environment/project
+Specify Julia environment. If not defined will use default startup environment.
+https://pkgdocs.julialang.org/v1/environments/
 
 ```matlab
-mjl = MATFrostHelloWorld(...
-   version = "1.10", ...
-   instantiate = true);  % By default is turned off.              
+   jl = matfrostjulia(project="<projectdir>");    
+      % Directory containing Julia environment.
+      % acts like: `julia --project=<projectdir> ...`
 ```
 
 ## Calling Julia functions
-
 Julia functions are called according to:
 ```matlab
 % MATLAB
-mjl.Package1.function1(arg1, arg2)
+jl.Package1.function1(arg1, arg2)
 ```
+
 which operates as:
 ```julia
 # Julia
@@ -135,14 +83,10 @@ import Package1
 Package1.function1(arg1, arg2)
 ```
 
-And to increase readability:
+Additionally nested modules are supported:
 ```matlab
 % MATLAB
-mjl = MATFrostHelloWorld();
-    
-hwjl = mjl.MATFrostHelloWorld; 
-
-hwjl.matfrost_hello_world(); % 'Hello Julia! :)'
+jl.Package1.NestedModule1.function1(arg1, arg2)
 ```
 
 ## Conditions Julia functions
@@ -155,7 +99,7 @@ To be able to call Julia functions through MATFrost it needs to satisfy some con
 ```julia
 # Bad
 struct Point # `Point` is not concrete entirely as `Number` is abstract.
-   x :: Number 
+   x :: Number # Number is abstract
    y :: Number
 end
 

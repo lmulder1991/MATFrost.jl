@@ -5,14 +5,15 @@ function matfrostmake(mjlname)
 % Or see https://mathworks.com/help/matlab/matlab_external/install-mingw-support-package.html
 
 arguments
-    mjlname  (1,1) string 
+    mjlname  (1,1) string = "matfrostjuliacall"
 end
 
 % julia_dir = fileparts(fileparts(juliaexe));
 if ispc
     mex("-setup:" + fullfile(matlabroot(), "bin", "win64", "mexopts","mingw64_g++.xml"), "C++")
+    % mex('-setup', 'c++')
     mex('-v', ...
-        fullfile(fileparts(mfilename('fullpath')), 'lib/libjulia-matfrost.dll.a'), ...
+        '-lws2_32',...
         '-output', fullfile(fileparts(mfilename('fullpath')), "bin", mjlname + ".mexw64"), ...
         fullfile(fileparts(mfilename('fullpath')), 'matfrostjuliacall.cpp'));
 % elseif isunix
