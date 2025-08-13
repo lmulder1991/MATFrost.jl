@@ -15,9 +15,9 @@ using matlab::mex::ArgumentList;
 #include <complex>
 
 #include <chrono>
-// #include "converttojulia.hpp"
-// #include "converttomatlab.hpp"
 #include "main.cpp"
+#include "converttojulia.hpp"
+// #include "converttomatlab.hpp"
 //
 // extern "C" {
 //     #include "matfrost.h"
@@ -46,7 +46,7 @@ private:
     // void (*freematfrostmemory)(MATFrostArray) = nullptr;
     // std::string julia_environment_path;
     JuliaProcess jp = JuliaProcess::spawn(R"(C:\Users\jbelier\.julia\juliaup\julia-1.12.0-rc1+0.x64.w64.mingw32\bin\julia.exe)",
-       R"(C:\Users\jbelier\Documents\JuliaEnvs\MATFrostDev)");
+       R"(C:\Users\jbelier\Documents\GitHub\MATFrost.jl)");
 
 public:
     MexFunction() {
@@ -89,22 +89,29 @@ public:
         std:: cout << "Before alloc";
         std::shared_ptr<std::array<int64_t, EXPERIMENT_SIZE>> buf = std::make_shared<std::array<int64_t, EXPERIMENT_SIZE>>();
 
+        BufferedOutputStream& outputstream = jp.outputstream;
+        BufferedInputStream& inputstream = jp.inputstream;
+
+
 
 
         matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
             ({ factory.createScalar(("###################################\nStart setting \n###################################\n"))}));
         std:: cout << "Before alloc";
 
-        std::array<int64_t, EXPERIMENT_SIZE>& bufp = *buf;
-        for (size_t i = 0; i < EXPERIMENT_SIZE; i++) {
-            bufp[i] = i;
-        }
+        // std::array<int64_t, EXPERIMENT_SIZE>& bufp = *buf;
+        // for (size_t i = 0; i < EXPERIMENT_SIZE; i++) {
+        //     bufp[i] = i;
+        // }
+
+
 
         matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
             ({ factory.createScalar(("###################################\nStart writing \n###################################\n"))}));
         std:: cout << "Writing" << std::endl;
-        jp.write((uint8_t*) &bufp[0], 8 * EXPERIMENT_SIZE);
-        jp.flush();
+        MATFrost::ConvertToJulia::write(inputs[0], outputstream);
+        // outputstream.write((uint8_t*) &bufp[0], 8 * EXPERIMENT_SIZE);
+        outputstream.flush();
 
         matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
             ({ factory.createScalar(("###################################\nFinished writing \n###################################\n"))}));
@@ -112,7 +119,7 @@ public:
         std:: cout << "Finished writing" << std::endl;
 
         int64_t result = 0;
-        jp.read((uint8_t*) &result, 8);
+        inputstream.read((uint8_t*) &result, 8);
 
 
         // int64_t* el = (int64_t*) &buf[0];

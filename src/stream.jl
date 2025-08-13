@@ -1,0 +1,136 @@
+
+
+module _Stream
+
+mutable struct BufferedStream
+    handle::Ptr{Cvoid}
+    buffer::Vector{UInt8}
+    position::Int64
+    available::Int64
+end
+
+bytesavailable(io::BufferedStream) = io.available - io.position
+
+function flush!(io::BufferedStream)
+    
+    byteswritten = Ref{UInt32}()
+    while (io.available > io.position) 
+
+        @ccall "kernel32".WriteFile(
+            io.handle::Ptr{Cvoid},
+            (pointer(io.buffer)+io.position)::Ptr{Cvoid},
+            Int32(io.available - io.position)::Cint,
+            byteswritten::Ref{UInt32},
+            C_NULL::Ptr{Cvoid})::Int32
+
+        io.position += byteswritten[]
+    end
+    io.position = 0
+    io.available = 0
+end
+
+function _write!(io::BufferedStream, buf::Ptr{UInt8}, nb::Int64)
+
+    bw = min(length(io.buffer) - io.available, nb);
+    Base.memcpy(pointer(io.buffer) + io.available, buf, bw);
+    io.available += bw
+
+    if (bw >= nb) 
+        return
+    end
+
+    flush!(io)
+    # p = pointer(io.buffer)
+    byteswritten = Ref{UInt32}()
+    while (nb - bw >= length(io.buffer))
+        @ccall "kernel32".WriteFile(
+            io.handle::Ptr{Cvoid},
+            (buf + bw)::Ptr{Cvoid},
+            Int32(length(io.buffer))::Cint,
+            byteswritten::Ref{UInt32},
+            C_NULL::Ptr{Cvoid})::Int32
+        bw += byteswritten[]
+    end
+
+    if (bw < nb) 
+        io.position  = 0
+        io.available = nb - bw
+        Base.memcpy(pointer(io.buffer), buf+bw, io.available);
+    end
+
+end
+
+function write!(io::BufferedStream, v::T) where {T<:Number}
+    if (length(io.buffer) - io.available > sizeof(T))
+        unsafe_store!(reinterpret(Ptr{T}, pointer(io.buffer) + io.available), v)
+        io.available += sizeof(T)
+    else
+        vref = Ref{T}(v)
+        _write!(io, reinterpret(Ptr{UInt8}, pointer_from_objref(vref)), sizeof(T))
+    end
+    return
+end
+
+
+function _read!(io::BufferedStream, p::Ptr{UInt8}, nb::Int64)
+    br = 0
+    bufferp = pointer(io.buffer)
+    while (br < nb)
+        if (io.available - io.position > 0) 
+            brn = min(io.available - io.position , nb - br)
+            Base.memcpy(p + br, bufferp + io.position, brn)
+            io.position += brn
+            br += brn
+        elseif (nb - br >= length(io.buffer)) 
+            bytesread = Ref{UInt32}()
+            toread = min(length(io.buffer), nb - br)
+            @ccall "kernel32".ReadFile(
+                io.handle::Ptr{Cvoid},
+                (p + br)::Ptr{Cvoid},
+                Int32(toread)::Cint,
+                bytesread::Ref{UInt32},
+                C_NULL::Ptr{Cvoid})::Int32
+
+            br += bytesread[]
+        else
+            bytesread = Ref{UInt32}()
+
+            @ccall "kernel32".ReadFile(
+                io.handle::Ptr{Cvoid},
+                bufferp::Ptr{Cvoid},
+                Int32(length(io.buffer))::Cint,
+                bytesread::Ref{UInt32},
+                C_NULL::Ptr{Cvoid})::Int32
+
+            io.position = 0
+            io.available = bytesread[]
+
+         end
+
+
+    end
+end
+
+
+function read!(io::BufferedStream, arr::Array{T}) where {T <: Number}
+    _read!(io, reinterpret(Ptr{UInt8}, pointer(arr)), sizeof(T) * length(arr))
+end
+
+
+
+function read!(io::BufferedStream, ::Type{T}) where {T <: Number}
+    if io.available - io.position >= sizeof(T)
+        v = unsafe_load(reinterpret(Ptr{T}, pointer(io.buffer) + io.position))
+        io.position += sizeof(T)
+        return v
+    else
+        v = Ref{T}()
+        _read!(io, reinterpret(Ptr{UInt8}, pointer_from_objref(v)), sizeof(T))
+        return v[]
+    end
+end
+
+
+
+
+end

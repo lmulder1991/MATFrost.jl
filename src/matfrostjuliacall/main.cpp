@@ -46,17 +46,20 @@ int main() {
       bufp[i] = i;
    }
 
+   BufferedOutputStream& outputstream = jp.outputstream;
+   BufferedInputStream& inputstream = jp.inputstream;
+
 
    std:: cout << "Writing" << std::endl;
-   jp.write((uint8_t*) &bufp[0], 4000000000);
-   jp.flush();
+   outputstream.write((uint8_t*) &bufp[0], 4000000000);
+   outputstream.flush();
 
 
 
    std:: cout << "Finished writing" << std::endl;
 
    int64_t result = 0;
-   jp.read((uint8_t*) &result, 8);
+   inputstream.read((uint8_t*) &result, 8);
 
    // int64_t* el = (int64_t*) &buf[0];
    //

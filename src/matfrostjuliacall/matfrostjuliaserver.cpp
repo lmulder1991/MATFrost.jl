@@ -15,39 +15,146 @@
 
 #define BUFSIZE 65536 // 16384
 
-class JuliaProcess {
+class BufferedOutputStream {
+    std::array<uint8_t, BUFSIZE> buffer{};
+    size_t position = 0;
+    size_t available = 0;
 
-    struct {
-        std::array<uint8_t, BUFSIZE> buffer;
-        size_t position;
-        size_t available;
-    } outputstream = {.buffer ={}, .position = 0, .available = 0};
+    HANDLE handle = nullptr;
 
-    struct {
-        std::array<uint8_t, BUFSIZE> buffer{};
-        size_t position = 0;
-        size_t available = 0;
-    } inputstream = {.buffer ={}, .position = 0, .available = 0};
+public:
 
+    explicit BufferedOutputStream(HANDLE h) : handle(h) {}
 
-    std::array<HANDLE, 2> h_stdin;
-    std::array<HANDLE, 2> h_stdout;
-    std::array<HANDLE, 2> h_stderr;
+    ~BufferedOutputStream() {
+        CloseHandle(handle);
+    }
 
-    // STD_INPUT_HANDLE
+    void write(const uint8_t* buf, const size_t nb) {
+        size_t bw = std::min(buffer.size() - available, nb);
+        memcpy(&buffer[available], buf, bw);
+        available += bw;
 
-    PROCESS_INFORMATION process_information;
+        if (bw >= nb) {
+            return;
+        }
 
-    JuliaProcess(std::array<HANDLE, 2> h_stdin, std::array<HANDLE, 2> h_stdout, std::array<HANDLE, 2> h_stderr, PROCESS_INFORMATION process_information) :
-        h_stdin(h_stdin), h_stdout(h_stdout), h_stderr(h_stderr), process_information(process_information)
-    {
+        flush();
+
+        while (nb - bw >= buffer.size()) {
+            DWORD bytes_written = 0;
+            WriteFile(
+                handle,
+                &buf[bw],
+                buffer.size(),
+                &bytes_written,
+                nullptr);
+            bw += bytes_written;
+        }
+
+        if (bw < nb) {
+            position  = 0;
+            available = nb - bw;
+            memcpy(&buffer[0], &buf[bw], available);
+        }
+    }
+
+    void flush() {
+        while (available > position) {
+            DWORD bytes_written = 0;
+            WriteFile(
+                handle,
+                &buffer[position],
+                available-position,
+                &bytes_written,
+                nullptr);
+
+            position += bytes_written;
+        }
+        position = 0;
+        available = 0;
 
 
     }
+};
 
+class BufferedInputStream {
+    std::array<uint8_t, BUFSIZE> buffer{};
+    size_t position;
+    size_t available;
 
+    HANDLE handle = nullptr;
 
 public:
+
+    explicit BufferedInputStream(HANDLE h) : handle(h), position(0), available(0) {
+    }
+
+    ~BufferedInputStream() {
+        CloseHandle(handle);
+    }
+
+    void read(uint8_t* buf, const size_t nb) {
+        size_t br = 0;
+
+        while (br < nb) {
+            if (available - position > 0) {
+                size_t brn = std::min(available - position , nb - br);
+                memcpy(&buf[br], &buffer[position], brn);
+                position += brn;
+                br += brn;
+
+            } else if (nb - br >= buffer.size()) {
+                DWORD bytes_read;
+                ReadFile(
+                    handle,
+                    &buf[br],
+                    buffer.size(),
+                    &bytes_read,
+                    nullptr);
+                br += bytes_read;
+            } else {
+                DWORD bytes_read;
+
+                ReadFile(
+                    handle,
+                    &buffer[0],
+                    buffer.size(),
+                    &bytes_read,
+                    nullptr);
+
+                position = 0;
+                available = bytes_read;
+
+            }
+
+
+        }
+
+    };
+
+};
+
+class JuliaProcess {
+
+public:
+
+
+    BufferedInputStream inputstream;
+    BufferedOutputStream outputstream;
+    BufferedInputStream errorstream;
+
+    PROCESS_INFORMATION process_information;
+
+    JuliaProcess(HANDLE inputstream_h, HANDLE errorstream_h, HANDLE outputstream_h, PROCESS_INFORMATION process_information) :
+        process_information(process_information),
+        inputstream(BufferedInputStream(inputstream_h)),
+        outputstream(BufferedOutputStream(outputstream_h)),
+        errorstream(BufferedInputStream(errorstream_h))
+    {
+
+    }
+
 
     ~JuliaProcess() {
         // Close handles to the child process and its primary thread.
@@ -62,104 +169,18 @@ public:
 
         // Close handles to the stdin and stdout pipes no longer needed by the child process.
         // If they are not explicitly closed, there is no way to recognize that the child process has ended.
-
-        CloseHandle(h_stdin[1]);
-        CloseHandle(h_stdout[0]);
-        CloseHandle(h_stderr[0]);
-    }
-
-    void write(const uint8_t* buf, const size_t nb) {
-        size_t bw = std::min(outputstream.buffer.size() - outputstream.available, nb);
-        memcpy(&outputstream.buffer[outputstream.available], buf, bw);
-        outputstream.available += bw;
-
-        if (bw >= nb) {
-            return;
-        }
-
-        flush();
-
-        while (nb - bw >= outputstream.buffer.size()) {
-            DWORD bytes_written = 0;
-            WriteFile(
-                h_stdin[1],
-                &buf[bw],
-                outputstream.buffer.size(),
-                &bytes_written,
-                nullptr);
-            bw += bytes_written;
-        }
-
-        if (bw < nb) {
-            outputstream.position  = 0;
-            outputstream.available = nb - bw;
-            memcpy(&outputstream.buffer[0], &buf[bw], outputstream.available);
-        }
-    }
-
-    void flush() {
-        while (outputstream.available > outputstream.position) {
-            DWORD bytes_written = 0;
-            WriteFile(
-                h_stdin[1],
-                &outputstream.buffer[outputstream.position],
-                outputstream.available-outputstream.position,
-                &bytes_written,
-                nullptr);
-
-            outputstream.position += bytes_written;
-        }
-        outputstream.position = 0;
-        outputstream.available = 0;
-
+        //
 
     }
 
 
-    void read(uint8_t* buf, const size_t nb) {
-        size_t br = 0;
-
-        while (br < nb) {
-            if (inputstream.available - inputstream.position > 0) {
-                size_t brn = std::min(inputstream.available - inputstream.position , nb - br);
-                memcpy(&buf[br], &inputstream.buffer[inputstream.position], brn);
-                inputstream.position += brn;
-                br += brn;
-
-            } else if (nb - br >= inputstream.buffer.size()) {
-                DWORD bytes_read;
-                ReadFile(
-                    h_stdout[0],
-                    &buf[br],
-                    inputstream.buffer.size(),
-                    &bytes_read,
-                    nullptr);
-                br += bytes_read;
-            } else {
-                DWORD bytes_read;
-
-                ReadFile(
-                    h_stdout[0],
-                    &inputstream.buffer[0],
-                    inputstream.buffer.size(),
-                    &bytes_read,
-                    nullptr);
-
-                inputstream.position = 0;
-                inputstream.available = bytes_read;
-
-            }
 
 
-        }
-
-    };
 
 
     static JuliaProcess spawn(const std::string& bin, const std::string& project) {
         // TCHAR szCmdline[]=TEXT("C:\\Users\\jbelier\\.julia\\juliaup\\julia-1.12.0-rc1+0.x64.w64.mingw32\\bin\\julia.exe -e \"println(read(stdin, Int64))\"");
 
-        std::string cmdline = "\"" + bin + "\" --project=\"" + project + "\" -e \"using MATFrostDev ; MATFrostDev.serve()\"";//read(stdin, Int64))\"";
 
         SECURITY_ATTRIBUTES saAttr;
 
@@ -199,6 +220,8 @@ public:
 
         std::cout << "HANDLE stdin.Read: " << h_stdin[0] << " stdin.Write:" << h_stdin[1] << std::endl;
 
+        std::string cmdline = "\"" + bin + "\" --project=\"" + project + "\" -e \"using MATFrost ; MATFrost.serve(" +
+            std::to_string((long long) h_stdin[0]) + ", "+ std::to_string((long long) h_stdout[1]) +")\"";//read(stdin, Int64))\"";
 
 
 
@@ -212,8 +235,8 @@ public:
 
 
         siStartInfo.cb = sizeof(STARTUPINFO);
-        siStartInfo.hStdInput  = h_stdin[0];
-        siStartInfo.hStdOutput = h_stdout[1];
+        // siStartInfo.hStdInput  = h_stdin[0];
+        // siStartInfo.hStdOutput = h_stdout[1];
         siStartInfo.hStdError  = h_stderr[1];
         siStartInfo.dwFlags |= STARTF_USESTDHANDLES;
 
@@ -225,7 +248,7 @@ public:
           nullptr,       // process security attributes
           nullptr,       // primary thread security attributes
           TRUE,          // handles are inherited
-          0,             // creation flags
+          CREATE_NO_WINDOW,             // creation flags
           nullptr,       // use parent's environment
           nullptr,       // use parent's current directory
           &siStartInfo,  // STARTUPINFO pointer
@@ -237,7 +260,11 @@ public:
         CloseHandle(h_stderr[1]);
 
 
-        const JuliaProcess jp(h_stdin, h_stdout, h_stderr, piProcInfo);
+
+        const JuliaProcess jp(
+            h_stdout[0],
+            h_stderr[0],
+            h_stdin[1], piProcInfo);
 
         return jp;
 
