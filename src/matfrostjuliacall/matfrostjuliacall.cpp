@@ -17,7 +17,8 @@ using matlab::mex::ArgumentList;
 #include <chrono>
 #include "main.cpp"
 #include "converttojulia.hpp"
-// #include "converttomatlab.hpp"
+
+#include "converttomatlab.hpp"
 //
 // extern "C" {
 //     #include "matfrost.h"
@@ -118,8 +119,10 @@ public:
 
         std:: cout << "Finished writing" << std::endl;
 
-        int64_t result = 0;
-        inputstream.read((uint8_t*) &result, 8);
+        outputs[0] = MATFrost::ConvertToMATLAB::read(inputstream);
+
+        // int64_t result = 0;
+        // inputstream.read((uint8_t*) &result, 8);
 
 
         // int64_t* el = (int64_t*) &buf[0];
@@ -136,7 +139,7 @@ public:
 
         // result = 46744073709551615;
         matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
-            ({ factory.createScalar(("###################################\nMATFrost error: " + std::to_string(result) + "\n###################################\n"))}));
+            ({ factory.createScalar(("###################################\nMATFrost error: " + std::to_string(99) + "\n###################################\n"))}));
         // main();
         // // lk_mex will sequentialize Julia jobs in case of concurrent MEX-calls.
         // std::lock_guard<std::mutex> lk_mex(mtx_mex);

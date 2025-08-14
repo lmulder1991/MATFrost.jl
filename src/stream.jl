@@ -9,10 +9,7 @@ mutable struct BufferedStream
     available::Int64
 end
 
-bytesavailable(io::BufferedStream) = io.available - io.position
-
-function flush!(io::BufferedStream)
-    
+function flush!(io::BufferedStream)  
     byteswritten = Ref{UInt32}()
     while (io.available > io.position) 
 
@@ -27,6 +24,7 @@ function flush!(io::BufferedStream)
     end
     io.position = 0
     io.available = 0
+    nothing
 end
 
 function _write!(io::BufferedStream, buf::Ptr{UInt8}, nb::Int64)
@@ -57,7 +55,7 @@ function _write!(io::BufferedStream, buf::Ptr{UInt8}, nb::Int64)
         io.available = nb - bw
         Base.memcpy(pointer(io.buffer), buf+bw, io.available);
     end
-
+    nothing
 end
 
 function write!(io::BufferedStream, v::T) where {T<:Number}
@@ -68,8 +66,15 @@ function write!(io::BufferedStream, v::T) where {T<:Number}
         vref = Ref{T}(v)
         _write!(io, reinterpret(Ptr{UInt8}, pointer_from_objref(vref)), sizeof(T))
     end
-    return
+    nothing
 end
+
+
+function write!(io::BufferedStream, arr::Array{T}) where {T<:Number}
+    _write!(io, reinterpret(Ptr{UInt8}, pointer(arr)), elsize(arr)*length(arr))
+    nothing
+end
+
 
 
 function _read!(io::BufferedStream, p::Ptr{UInt8}, nb::Int64)
@@ -106,19 +111,19 @@ function _read!(io::BufferedStream, p::Ptr{UInt8}, nb::Int64)
             io.available = bytesread[]
 
          end
-
-
     end
+    nothing
 end
 
 
 function read!(io::BufferedStream, arr::Array{T}) where {T <: Number}
     _read!(io, reinterpret(Ptr{UInt8}, pointer(arr)), sizeof(T) * length(arr))
+    nothing
 end
 
 
 
-function read!(io::BufferedStream, ::Type{T}) where {T <: Number}
+function read!(io::BufferedStream, ::Type{T}) :: T where {T <: Number}
     if io.available - io.position >= sizeof(T)
         v = unsafe_load(reinterpret(Ptr{T}, pointer(io.buffer) + io.position))
         io.position += sizeof(T)

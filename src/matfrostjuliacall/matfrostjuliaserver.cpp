@@ -30,9 +30,9 @@ public:
         CloseHandle(handle);
     }
 
-    void write(const uint8_t* buf, const size_t nb) {
-        size_t bw = std::min(buffer.size() - available, nb);
-        memcpy(&buffer[available], buf, bw);
+    void write(const uint8_t* data, const size_t nb) {
+        size_t bw = std::min(BUFSIZE - available, nb);
+        memcpy(&buffer[available], data, bw);
         available += bw;
 
         if (bw >= nb) {
@@ -41,12 +41,12 @@ public:
 
         flush();
 
-        while (nb - bw >= buffer.size()) {
+        while (nb - bw >= BUFSIZE) {
             DWORD bytes_written = 0;
             WriteFile(
                 handle,
-                &buf[bw],
-                buffer.size(),
+                &data[bw],
+                BUFSIZE,
                 &bytes_written,
                 nullptr);
             bw += bytes_written;
@@ -55,7 +55,7 @@ public:
         if (bw < nb) {
             position  = 0;
             available = nb - bw;
-            memcpy(&buffer[0], &buf[bw], available);
+            memcpy(&buffer[0], &data[bw], available);
         }
     }
 
@@ -94,22 +94,22 @@ public:
         CloseHandle(handle);
     }
 
-    void read(uint8_t* buf, const size_t nb) {
+    void read(uint8_t* data, const size_t nb) {
         size_t br = 0;
 
         while (br < nb) {
             if (available - position > 0) {
                 size_t brn = std::min(available - position , nb - br);
-                memcpy(&buf[br], &buffer[position], brn);
+                memcpy(&data[br], &buffer[position], brn);
                 position += brn;
                 br += brn;
 
-            } else if (nb - br >= buffer.size()) {
+            } else if (nb - br >= BUFSIZE) {
                 DWORD bytes_read;
                 ReadFile(
                     handle,
-                    &buf[br],
-                    buffer.size(),
+                    &data[br],
+                    BUFSIZE,
                     &bytes_read,
                     nullptr);
                 br += bytes_read;
@@ -119,7 +119,7 @@ public:
                 ReadFile(
                     handle,
                     &buffer[0],
-                    buffer.size(),
+                    BUFSIZE,
                     &bytes_read,
                     nullptr);
 

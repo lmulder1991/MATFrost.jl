@@ -60,6 +60,10 @@ function serve(h_stdin_num, h_stdout_num)
         _Stream.read!(in_buf, arr)
 
 
+        _Stream.write!(out_buf, Int32(11))
+        _Stream.write!(out_buf, Int64(2))
+        _Stream.write!(out_buf, Int64(1))
+        _Stream.write!(out_buf, Int64(1))
         _Stream.write!(out_buf, convert(Int64, sum(arr)))
         _Stream.flush!(out_buf)
         
