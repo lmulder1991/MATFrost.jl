@@ -2,6 +2,9 @@ module MATFrost
 using Artifacts
 using TOML
 
+function _read! end
+function _write! end
+
 struct _MATFrostArray
     type::Cint
     ndims::Csize_t
@@ -26,6 +29,11 @@ include("mex.jl")
 
 using ._Stream
 
+struct StructTest
+    a::Float64
+    b::Int64
+    c::String
+end
 function serve(h_stdin_num, h_stdout_num)
     Nel = 1000000 + 2*3 + 1
     buf = Vector{Int32}(undef, Nel)
@@ -60,11 +68,28 @@ function serve(h_stdin_num, h_stdout_num)
         _Stream.read!(in_buf, arr)
 
 
-        _Stream.write!(out_buf, Int32(11))
-        _Stream.write!(out_buf, Int64(2))
-        _Stream.write!(out_buf, Int64(1))
-        _Stream.write!(out_buf, Int64(1))
-        _Stream.write!(out_buf, convert(Int64, sum(arr)))
+        # _Stream.write!(out_buf, Int32(11))
+        # _Stream.write!(out_buf, Int64(2))
+        # _Stream.write!(out_buf, Int64(1))
+        # _Stream.write!(out_buf, Int64(1))
+        # _Stream.write!(out_buf, convert(Int64, sum(arr)))
+        # _ConvertToMATLAB.write_matlab!(out_buf, convert(Int64, sum(arr)))
+
+        # _ConvertToMATLAB.write_matlab!(out_buf, collect(5:1000))
+        
+        # _Stream.flush!(out_buf)
+        sarr = Array{String,3}(undef, 3,2,3)
+        for i in eachindex(sarr)
+            sarr[i] = "FFEF" * string(i)
+        end
+        
+        _ConvertToMATLAB.write_matlab!(out_buf, (2334,4.0,3,"FEF"))
+
+        # _ConvertToMATLAB.write_matlab!(out_buf, [StructTest(23.0, 33, "FFDF"), StructTest(23332.0, 3553, "2nd")])
+
+        # _ConvertToMATLAB.write_matlab!(out_buf, collect(5:1000))
+
+
         _Stream.flush!(out_buf)
         
         # write(stdout, convert(Int64, sum(arr)))

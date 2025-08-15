@@ -5,6 +5,7 @@
 // stdc++ lib
 #include <string>
 #include <complex>
+#include <memory>
 //
 // extern "C" {
 // #include "matfrost.h"
@@ -32,7 +33,74 @@ namespace MATFrost::ConvertToMATLAB {
 
     }
 
+    matlab::data::Array read_string(BufferedInputStream& is, matlab::data::ArrayDimensions dims) {
+        size_t nel = 1;
+        for (const auto dim : dims){
+            nel *= dim;
+        }
 
+        matlab::data::ArrayFactory factory;
+
+        matlab::data::StringArray strarr = factory.createArray<matlab::data::MATLABString>(dims);
+
+        for (auto e : strarr) {
+            size_t strbytes;
+
+            is.read(reinterpret_cast<uint8_t *>(&strbytes), sizeof(size_t));
+
+            auto strdata = std::vector<uint8_t>(strbytes);
+
+            is.read(strdata.data(), strbytes);
+            e = matlab::engine::convertUTF8StringToUTF16String(std::string(reinterpret_cast<char*>(strdata.data()), strbytes));
+
+        }
+        return strarr;
+    }
+    matlab::data::Array read_cell(BufferedInputStream& is, matlab::data::ArrayDimensions dims) {
+        matlab::data::ArrayFactory factory;
+
+        matlab::data::CellArray carr = factory.createCellArray(dims);
+
+        for (auto e : carr) {
+            e = read(is);
+        }
+        return carr;
+    }
+    matlab::data::Array read_struct(BufferedInputStream& is, matlab::data::ArrayDimensions dims) {
+        size_t nel = 1;
+        for (const auto dim : dims){
+            nel *= dim;
+        }
+        size_t nfields;
+
+        is.read(reinterpret_cast<uint8_t *>(&nfields), sizeof(size_t));
+
+        std::vector<std::string> fieldnames(nfields);
+        for (size_t i = 0; i < nfields; i++){
+            size_t strbytes;
+
+            is.read(reinterpret_cast<uint8_t *>(&strbytes), sizeof(size_t));
+
+            auto strdata = std::vector<uint8_t>(strbytes);
+
+            is.read(strdata.data(), strbytes);
+
+            fieldnames[i] = std::string(reinterpret_cast<char*>(strdata.data()), strbytes);
+        }
+
+        matlab::data::ArrayFactory factory;
+
+
+        matlab::data::StructArray matstruct = factory.createStructArray(dims, fieldnames);
+
+        for (auto e : matstruct) {
+            for (size_t fi = 0; fi < nfields; fi++){
+                e[fieldnames[fi]] = read(is);
+            }
+        }
+
+        return matstruct;
+    }
 
 //
 // matlab::data::Array convert(const MATFrostArray mfa);
@@ -74,8 +142,8 @@ namespace MATFrost::ConvertToMATLAB {
 //     size_t eli = 0;
 //     const char** strdata = (const char**) mfa.data;
 //     for (auto e : strarr) {
-//         e = matlab::engine::convertUTF8StringToUTF16String(strdata[eli]);
-//         eli++;
+         // e = matlab::engine::convertUTF8StringToUTF16String(strdata[eli]);
+         // eli++;
 //     }
 //     return strarr;
 // }
@@ -146,12 +214,12 @@ matlab::data::Array read(BufferedInputStream& is){
     is.read(reinterpret_cast<uint8_t *>(dims.data()), sizeof(size_t)*ndims);
 
     switch (static_cast<matlab::data::ArrayType>(type)) {
-        // case matlab::data::ArrayType::CELL:
-        //      return convert_cell(mfa);
-        // case matlab::data::ArrayType::STRUCT:
-        //     return convert_struct(mfa);
-        // case matlab::data::ArrayType::MATLAB_STRING:
-        //      return convert_string(mfa);
+        case matlab::data::ArrayType::CELL:
+             return read_cell(is, dims);
+        case matlab::data::ArrayType::STRUCT:
+            return read_struct(is, dims);
+        case matlab::data::ArrayType::MATLAB_STRING:
+             return read_string(is, dims);
         case matlab::data::ArrayType::LOGICAL:
             return read_primitive<bool>(is, dims);
 

@@ -2,6 +2,7 @@ module _ConvertToJulia
 
 using ..MATFrost: _MATFrostArray as MATFrostArray
 using ..MATFrost: _MATFrostException as MATFrostException
+# using ..MATFrost._Stream: BufferedStream, 
 
 function new_array(::Type{T}, dims::Ptr{Csize_t}, nel::Csize_t) where {T}
     T(undef, ntuple(i -> ifelse(i <= nel, unsafe_load(dims, i), Csize_t(1)), ndims(T)))
@@ -280,7 +281,15 @@ Array dimensions incompatible:
 """)
 end
 
-
+function read!(::Type{T}, mfa::MATFrostArray) where {T<:Number}
+    if !is_scalar_value(mfa)
+        throw(not_scalar_value_exception(T, mfa))
+    end
+    if !type_compatible(T, mfa)
+        throw(incompatible_datatypes_exception(T, mfa))
+    end
+    unsafe_load(reinterpret(Ptr{T}, mfa.data))
+end
 
 function convert_to_julia(::Type{T}, mfa::MATFrostArray) where {T<:Number}
     if !is_scalar_value(mfa)

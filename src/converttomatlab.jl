@@ -3,6 +3,7 @@ module _ConvertToMATLAB
 
 using ..MATFrost: _MATFrostArray as MATFrostArray
 
+import ..MATFrost._Stream: read!, write!, flush!, BufferedStream
 
 mutable struct MATFrostArrayMemory{N, T, Nf}
     matfrostarray::MATFrostArray
@@ -113,6 +114,129 @@ array_type(::Type{Complex{Int32}})  = COMPLEX_INT32
 array_type(::Type{Complex{UInt32}}) = COMPLEX_UINT32
 array_type(::Type{Complex{Int64}})  = COMPLEX_INT64
 array_type(::Type{Complex{UInt64}}) = COMPLEX_UINT64
+
+
+function write_matlab!(io::BufferedStream, v::T) where{T <: Number}
+    write!(io, array_type(T))
+    write!(io, Int64(1))
+    write!(io, Int64(1))
+    write!(io, v)
+    nothing
+end
+
+function write_matlab!(io::BufferedStream, arr::Array{T,N}) where{N, T <: Number}
+    write!(io, array_type(T))
+    write!(io, Int64(N))
+    for i in 1:N
+        write!(io, Int64(size(arr, i)))
+    end
+    write!(io, arr)
+    nothing
+end
+
+
+function write_matlab!(io::BufferedStream, s::String)
+    write!(io, MATLAB_STRING)
+    write!(io, Int64(1))
+    write!(io, Int64(1))
+
+    write!(io, Int64(ncodeunits(s)))
+    write!(io, pointer(s), Int64(ncodeunits(s)))
+    nothing
+end
+
+function write_matlab!(io::BufferedStream, arr::Array{String,N}) where{N}
+    write!(io, MATLAB_STRING)
+    write!(io, Int64(N))
+    for i in 1:N
+        write!(io, Int64(size(arr, i)))
+    end
+    for s in arr
+        write!(io, Int64(ncodeunits(s)))
+        write!(io, pointer(s), Int64(ncodeunits(s)))
+    end
+    nothing
+end
+
+function write_matlab!(io::BufferedStream, structval::T) where {T}
+    write!(io, STRUCT)
+    write!(io, Int64(1)) # ndims
+    write!(io, Int64(1)) # size dim1
+
+    write!(io, Int64(length(fieldnames(T)))) # numfields
+    for fieldname in fieldnames(T)
+        fns = string(fieldname)
+        write!(io, Int64(ncodeunits(fns)))
+        write!(io, pointer(fns), Int64(ncodeunits(fns)))
+    end
+
+    for fieldname in fieldnames(T)
+        write_matlab!(io, getfield(structval, fieldname))
+    end
+    nothing
+end
+
+function write_matlab!(io::BufferedStream, arr::Array{T,N}) where {T,N}
+    write!(io, STRUCT)
+    write!(io, Int64(N)) # ndims
+    for i in 1:N
+        write!(io, Int64(size(arr, i)))
+    end
+
+    write!(io, Int64(length(fieldnames(T)))) # numfields
+    for fieldname in fieldnames(T)
+        fns = string(fieldname)
+        write!(io, Int64(ncodeunits(fns)))
+        write!(io, pointer(fns), Int64(ncodeunits(fns)))
+    end
+
+    for el in arr
+        for fieldname in fieldnames(T)
+            write_matlab!(io, getfield(el, fieldname))
+        end
+    end
+    nothing
+end
+
+
+function write_matlab!(io::BufferedStream, tup::T) where {T<:Tuple}
+    write!(io, CELL)
+    write!(io, Int64(1)) # ndims
+    write!(io, Int64(length(tup))) # size dim1
+
+    for el in tup
+        write_matlab!(io, el)
+    end
+    nothing
+end
+
+function write_matlab!(io::BufferedStream, arr::Array{T,N}) where {N,T}
+    write!(io, CELL)
+    write!(io, Int64(N)) # ndims
+    for i in 1:N
+        write!(io, Int64(size(arr, i)))
+    end
+
+    for el in arr
+        write_matlab!(io, el)
+    end
+
+    nothing
+end
+
+
+# function write_matlab!(arr::Array{T,N}) where{N, T <: Number}
+#     println("test1")
+#     println("test2")
+    
+#     for i in 1:N
+#         println("test1" * string(size(arr, i)))
+#     end
+#     println("test")
+# end
+
+
+
 
 function convert(el::T) where {T <: Number}
     MATFrostArrayMemory{1, T, 0}(array_type(T), (Csize_t(1),), el, ())

@@ -2,6 +2,11 @@
 
 module _Stream
 
+function read! end
+function write! end
+function flush! end
+
+
 mutable struct BufferedStream
     handle::Ptr{Cvoid}
     buffer::Vector{UInt8}
@@ -27,10 +32,10 @@ function flush!(io::BufferedStream)
     nothing
 end
 
-function _write!(io::BufferedStream, buf::Ptr{UInt8}, nb::Int64)
+function write!(io::BufferedStream, data::Ptr{UInt8}, nb::Int64)
 
     bw = min(length(io.buffer) - io.available, nb);
-    Base.memcpy(pointer(io.buffer) + io.available, buf, bw);
+    Base.memcpy(pointer(io.buffer) + io.available, data, bw);
     io.available += bw
 
     if (bw >= nb) 
@@ -43,7 +48,7 @@ function _write!(io::BufferedStream, buf::Ptr{UInt8}, nb::Int64)
     while (nb - bw >= length(io.buffer))
         @ccall "kernel32".WriteFile(
             io.handle::Ptr{Cvoid},
-            (buf + bw)::Ptr{Cvoid},
+            (data + bw)::Ptr{Cvoid},
             Int32(length(io.buffer))::Cint,
             byteswritten::Ref{UInt32},
             C_NULL::Ptr{Cvoid})::Int32
@@ -53,7 +58,7 @@ function _write!(io::BufferedStream, buf::Ptr{UInt8}, nb::Int64)
     if (bw < nb) 
         io.position  = 0
         io.available = nb - bw
-        Base.memcpy(pointer(io.buffer), buf+bw, io.available);
+        Base.memcpy(pointer(io.buffer), data+bw, io.available);
     end
     nothing
 end
@@ -64,26 +69,26 @@ function write!(io::BufferedStream, v::T) where {T<:Number}
         io.available += sizeof(T)
     else
         vref = Ref{T}(v)
-        _write!(io, reinterpret(Ptr{UInt8}, pointer_from_objref(vref)), sizeof(T))
+        write!(io, reinterpret(Ptr{UInt8}, pointer_from_objref(vref)), sizeof(T))
     end
     nothing
 end
 
 
 function write!(io::BufferedStream, arr::Array{T}) where {T<:Number}
-    _write!(io, reinterpret(Ptr{UInt8}, pointer(arr)), elsize(arr)*length(arr))
+    write!(io, reinterpret(Ptr{UInt8}, pointer(arr)), sizeof(T)*length(arr))
     nothing
 end
 
 
 
-function _read!(io::BufferedStream, p::Ptr{UInt8}, nb::Int64)
+
+function read!(io::BufferedStream, data::Ptr{UInt8}, nb::Int64)
     br = 0
-    bufferp = pointer(io.buffer)
     while (br < nb)
         if (io.available - io.position > 0) 
             brn = min(io.available - io.position , nb - br)
-            Base.memcpy(p + br, bufferp + io.position, brn)
+            Base.memcpy(data + br, pointer(io.buffer) + io.position, brn)
             io.position += brn
             br += brn
         elseif (nb - br >= length(io.buffer)) 
@@ -91,7 +96,7 @@ function _read!(io::BufferedStream, p::Ptr{UInt8}, nb::Int64)
             toread = min(length(io.buffer), nb - br)
             @ccall "kernel32".ReadFile(
                 io.handle::Ptr{Cvoid},
-                (p + br)::Ptr{Cvoid},
+                (data + br)::Ptr{Cvoid},
                 Int32(toread)::Cint,
                 bytesread::Ref{UInt32},
                 C_NULL::Ptr{Cvoid})::Int32
@@ -102,7 +107,7 @@ function _read!(io::BufferedStream, p::Ptr{UInt8}, nb::Int64)
 
             @ccall "kernel32".ReadFile(
                 io.handle::Ptr{Cvoid},
-                bufferp::Ptr{Cvoid},
+                pointer(io.buffer)::Ptr{Cvoid},
                 Int32(length(io.buffer))::Cint,
                 bytesread::Ref{UInt32},
                 C_NULL::Ptr{Cvoid})::Int32
@@ -117,7 +122,7 @@ end
 
 
 function read!(io::BufferedStream, arr::Array{T}) where {T <: Number}
-    _read!(io, reinterpret(Ptr{UInt8}, pointer(arr)), sizeof(T) * length(arr))
+    read!(io, reinterpret(Ptr{UInt8}, pointer(arr)), sizeof(T) * length(arr))
     nothing
 end
 
@@ -130,7 +135,7 @@ function read!(io::BufferedStream, ::Type{T}) :: T where {T <: Number}
         return v
     else
         v = Ref{T}()
-        _read!(io, reinterpret(Ptr{UInt8}, pointer_from_objref(v)), sizeof(T))
+        read!(io, reinterpret(Ptr{UInt8}, pointer_from_objref(v)), sizeof(T))
         return v[]
     end
 end
