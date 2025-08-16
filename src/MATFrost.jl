@@ -66,7 +66,7 @@ function serve(h_stdin_num, h_stdout_num)
         try 
             
         # arr = _ConvertToJulia.read_matlab!(in_buf, Vector{Int32})
-            arr = _ConvertToJulia.read_matlab!(in_buf, StructTestNest)
+            arr = _ConvertToJulia.read_matlab!(in_buf, Vector{StructTestNest})
 
             _ConvertToMATLAB.write_matlab!(out_buf, arr)
         catch e

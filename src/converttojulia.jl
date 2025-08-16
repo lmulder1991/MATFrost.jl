@@ -474,33 +474,39 @@ end
         
         for eli in eachindex(arr)
 
-            # Create local variables with type annotation, {Nothing, FieldType}
-            $((quote
-                $(Symbol(:_lfv_, fieldnames(T)[i])) :: Union{Nothing, $(fieldtypes(T)[i])} = nothing
-            end for i in eachindex(fieldnames(T)))...)
+            try
+                # Create local variables with type annotation, {Nothing, FieldType}
+                $((quote
+                    $(Symbol(:_lfv_, fieldnames(T)[i])) :: Union{Nothing, $(fieldtypes(T)[i])} = nothing
+                end for i in eachindex(fieldnames(T)))...)
 
-            # Parse each field value. Parsing must be done in the order of MATFrostSequence
-            for fn_i in 1:length(fieldnames_mat)
-                fieldname = fieldnames_mat[fn_i]
-                try 
-                    $((quote
-                        if (fieldname == fieldnames(T)[$(i)])
-                            $(Symbol(:_lfv_, fieldnames(T)[i])) = read_matlab!(io, $(fieldtypes(T)[i]))
-                        end
-                    end for i in eachindex(fieldnames(T)))...)
-                catch e
-                    clear_matfrost_object!(io, (prod(dims)-eli+1)*numfields_mat - fn_i)
-                    throw(e)
+                # Parse each field value. Parsing must be done in the order of MATFrostSequence
+                for fn_i in 1:length(fieldnames_mat)
+                    fieldname = fieldnames_mat[fn_i]
+                    try 
+                        $((quote
+                            if (fieldname == fieldnames(T)[$(i)])
+                                $(Symbol(:_lfv_, fieldnames(T)[i])) = read_matlab!(io, $(fieldtypes(T)[i]))
+                            end
+                        end for i in eachindex(fieldnames(T)))...)
+                    catch e
+                        clear_matfrost_object!(io, numfields_mat - fn_i)
+                        throw(e)
+                    end
                 end
+
+                # Force {Nothing, FieldType} to FieldType
+                $((quote
+                    $(Symbol(:_lfva_, fieldnames(T)[i])) :: $(fieldtypes(T)[i]) = $(Symbol(:_lfv_, fieldnames(T)[i]))
+                end for i in eachindex(fieldnames(T)))...)
+
+                # Construct new struct
+                arr[eli] = T($((Symbol(:_lfva_, fieldnames(T)[i]) for i in eachindex(fieldnames(T)))...))
+
+            catch e
+                clear_matfrost_object!(io, (prod(dims)-eli)*numfields_mat)
+                throw(e)
             end
-
-            # Force {Nothing, FieldType} to FieldType
-            $((quote
-                $(Symbol(:_lfva_, fieldnames(T)[i])) :: $(fieldtypes(T)[i]) = $(Symbol(:_lfv_, fieldnames(T)[i]))
-            end for i in eachindex(fieldnames(T)))...)
-
-            # Construct new struct
-            arr[eli] = T($((Symbol(:_lfva_, fieldnames(T)[i]) for i in eachindex(fieldnames(T)))...))
 
         end
         arr
