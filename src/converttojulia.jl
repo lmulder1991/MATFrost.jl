@@ -387,47 +387,15 @@ end
 
 
 @generated function read_matlab!(io::BufferedStream, ::Type{T}) where {T}
-
     
-    localfieldvars = Vector{Expr}(undef, length(fieldnames(T)))
-    for i = 1:length(localfieldvars)
-        localfieldvars[i] = :($(Symbol(:_lfv_, fieldnames(T)[i])) :: Union{Nothing, $(fieldtypes(T)[i])} = nothing )
-    end
-
-    fieldparsing = Vector{Expr}(undef, length(fieldnames(T)))
-    for i=1:length(fieldparsing)
-        fieldparsing[i] = quote
-           if (fieldname == fieldnames(T)[$(i)])
-                $(Symbol(:_lfv_, fieldnames(T)[i])) = read_matlab!(io, $(fieldtypes(T)[i]))
-           end
-        end
-    end
-
-    
-    localfieldvarsassert = Vector{Expr}(undef, length(fieldnames(T)))
-    for i = 1:length(localfieldvarsassert)
-        localfieldvarsassert[i] = quote
-            $(Symbol(:_lfva_, fieldnames(T)[i])) :: $(fieldtypes(T)[i]) = $(Symbol(:_lfv_, fieldnames(T)[i]))
-        end
-    end
-
-    constructorvalues = Vector{Symbol}(undef, length(fieldnames(T)))
-    for i = 1:length(constructorvalues)
-        constructorvalues[i] = :($(Symbol(:_lfva_, fieldnames(T)[i])))
-    end 
-
-
     return quote
         read_matfrostarray_header!(io, STRUCT, Val{0}())
         numfields_mat = read!(io, Int64)
-        fieldnames_string_mat = Vector{String}(undef, numfields_mat)
-        fieldnames_sym_mat = Vector{Symbol}(undef, numfields_mat)
+        fieldnames_mat = Vector{Symbol}(undef, numfields_mat)
         fieldname_in_type = Vector{Bool}(undef, numfields_mat)
-        for i in eachindex(fieldnames_string_mat)
-            s = read_string!(io)
-            fieldnames_string_mat[i] = s
-            fieldnames_sym_mat[i] = Symbol(s)
-            fieldname_in_type[i] = fieldnames_sym_mat[i] in fieldnames(T)
+        for i in eachindex(fieldnames_mat)
+            fieldnames_mat[i] = Symbol(read_string!(io))
+            fieldname_in_type[i] = fieldnames_mat[i] in fieldnames(T)
         end
         
         if (numfields_mat != length(fieldnames(T)) || !all(fieldname_in_type))
@@ -435,15 +403,29 @@ end
             throw("Fieldnames do not match")
         end
 
-        $(localfieldvars...)
+        $((quote
+            $(Symbol(:_lfv_, fieldnames(T)[i])) :: Union{Nothing, $(fieldtypes(T)[i])} = nothing
+        end for i in eachindex(fieldnames(T)))...)
 
-        for fieldname in fieldnames_sym_mat
-            $(fieldparsing...)
+        for fn_i in 1:length(fieldnames_mat)
+            fieldname = fieldnames_mat[fn_i]
+            try 
+                $((quote
+                     if (fieldname == fieldnames(T)[$(i)])
+                        $(Symbol(:_lfv_, fieldnames(T)[i])) = read_matlab!(io, $(fieldtypes(T)[i]))
+                    end
+                end for i in eachindex(fieldnames(T)))...)
+            catch e
+                clear_matfrost_object!(io, numfields_mat - fn_i)
+                throw(e)
+            end
         end
-        
-        $(localfieldvarsassert...)
 
-        T($(constructorvalues...))
+        $((quote
+            $(Symbol(:_lfva_, fieldnames(T)[i])) :: $(fieldtypes(T)[i]) = $(Symbol(:_lfv_, fieldnames(T)[i]))
+        end for i in eachindex(fieldnames(T)))...)
+
+        T($((Symbol(:_lfva_, fieldnames(T)[i]) for i in eachindex(fieldnames(T)))...))
 
 
     end
