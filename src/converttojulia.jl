@@ -326,7 +326,7 @@ function read_matfrostarray_header!(io::BufferedStream, expected_type::Int32, ::
     for _ in (N+1):ndims_mat
         dim = read!(io, Int64)
         nel *= dim
-        if dim > 1
+        if (dim > 1) | ((N == 0) & (dim != 1))
             incompatible_array_dimension = true
         end
     end
@@ -386,17 +386,73 @@ end
 
 
 
-@generated function read_matlab(io::BufferedStream, ::Type{T}) where {T}
+@generated function read_matlab!(io::BufferedStream, ::Type{T}) where {T}
 
-    quote
-        dims = read_matfrostarray_header!(io, STRUCT, Val{0}())
-        
+    
+    localfieldvars = Vector{Expr}(undef, length(fieldnames(T)))
+    for i = 1:length(localfieldvars)
+        localfieldvars[i] = :($(Symbol(:_lfv_, fieldnames(T)[i])) :: Union{Nothing, $(fieldtypes(T)[i])} = nothing )
     end
+
+    fieldparsing = Vector{Expr}(undef, length(fieldnames(T)))
+    for i=1:length(fieldparsing)
+        fieldparsing[i] = quote
+           if (fieldname == fieldnames(T)[$(i)])
+                $(Symbol(:_lfv_, fieldnames(T)[i])) = read_matlab!(io, $(fieldtypes(T)[i]))
+           end
+        end
+    end
+
+    
+    localfieldvarsassert = Vector{Expr}(undef, length(fieldnames(T)))
+    for i = 1:length(localfieldvarsassert)
+        localfieldvarsassert[i] = quote
+            $(Symbol(:_lfva_, fieldnames(T)[i])) :: $(fieldtypes(T)[i]) = $(Symbol(:_lfv_, fieldnames(T)[i]))
+        end
+    end
+
+    constructorvalues = Vector{Symbol}(undef, length(fieldnames(T)))
+    for i = 1:length(constructorvalues)
+        constructorvalues[i] = :($(Symbol(:_lfva_, fieldnames(T)[i])))
+    end 
+
+
+    return quote
+        read_matfrostarray_header!(io, STRUCT, Val{0}())
+        numfields_mat = read!(io, Int64)
+        fieldnames_string_mat = Vector{String}(undef, numfields_mat)
+        fieldnames_sym_mat = Vector{Symbol}(undef, numfields_mat)
+        fieldname_in_type = Vector{Bool}(undef, numfields_mat)
+        for i in eachindex(fieldnames_string_mat)
+            s = read_string!(io)
+            fieldnames_string_mat[i] = s
+            fieldnames_sym_mat[i] = Symbol(s)
+            fieldname_in_type[i] = fieldnames_sym_mat[i] in fieldnames(T)
+        end
+        
+        if (numfields_mat != length(fieldnames(T)) || !all(fieldname_in_type))
+            clear_matfrost_object!(io, numfields_mat)
+            throw("Fieldnames do not match")
+        end
+
+        $(localfieldvars...)
+
+        for fieldname in fieldnames_sym_mat
+            $(fieldparsing...)
+        end
+        
+        $(localfieldvarsassert...)
+
+        T($(constructorvalues...))
+
+
+    end
+
 end
 
 
-
-
+#  instream= MATFrost._Stream.BufferedStream(0, Vector{UInt8}(undef, 2<<13), 0, 0)
+#   MATFrost._ConvertToJulia.read_matlab!(instream, MATFrost.StructTest)
 
 # function assert_type_and_is_scalar(io::BufferedStream, expected_type::Int32)
 

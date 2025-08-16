@@ -32,7 +32,7 @@ using ._Stream
 struct StructTest
     a::Float64
     b::Int64
-    c::String
+    c::Float64
 end
 function serve(h_stdin_num, h_stdout_num)
     Nel = 1000000 + 2*3 + 1
@@ -58,11 +58,13 @@ function serve(h_stdin_num, h_stdout_num)
 
         # _ConvertToMATLAB.write_matlab!(out_buf, arr)
         try 
-            arr = _ConvertToJulia.read_matlab!(in_buf, Vector{Int32})
+            
+        # arr = _ConvertToJulia.read_matlab!(in_buf, Vector{Int32})
+            arr = _ConvertToJulia.read_matlab!(in_buf, StructTest)
 
             _ConvertToMATLAB.write_matlab!(out_buf, arr)
         catch e
-            _ConvertToMATLAB.write_matlab!(out_buf, "Error")
+            _ConvertToMATLAB.write_matlab!(out_buf, string(e))
         end
         _Stream.flush!(out_buf)
         # t = _Stream.read!(in_buf, Int32)
