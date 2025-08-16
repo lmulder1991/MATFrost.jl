@@ -264,7 +264,7 @@ function read_string!(io::BufferedStream) :: String
     transcode(String, sarr)
 end
 
-function clear_matfrost_object!(io::BufferedStream, numobjects::Int64 = 1)
+function clear_matfrostarray_object!(io::BufferedStream, numobjects::Int64 = 1)
     while numobjects > 0
         type = read!(io, Int32)
         ndims = read!(io, Int64)
@@ -343,9 +343,9 @@ function read_matfrostarray_header!(io::BufferedStream, expected_type::Int32, ::
                 nb = read!(io, Int64)
                 read_and_clear!(io, nb)
             end
-            clear_matfrost_object!(io, nfields * nel)
+            clear_matfrostarray_object!(io, nfields * nel)
         elseif type == CELL
-            clear_matfrost_object!(io, nel)
+            clear_matfrostarray_object!(io, nel)
         elseif type == MATLAB_STRING
             for _ in 1:nel
                 nb = read!(io, Int64)
@@ -373,25 +373,25 @@ function read_matfrostarray_header!(io::BufferedStream, expected_type::Int32, ::
 end
 
 
-function read_matlab!(io::BufferedStream, ::Type{T}) where {T <: Number}
+function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T <: Number}
     read_matfrostarray_header!(io, expected_matlab_type_id(T), Val{0}())
     read!(io, T)
 end
 
-function read_matlab!(io::BufferedStream, ::Type{Array{T,N}}) where {N, T <: Number}
+function read_matfrostarray!(io::BufferedStream, ::Type{Array{T,N}}) where {N, T <: Number}
     dims = read_matfrostarray_header!(io, expected_matlab_type_id(T), Val{N}())
     arr = Array{T,N}(undef, dims)
     read!(io, arr)
     arr
 end
 
-function read_matlab!(io::BufferedStream, ::Type{String})
+function read_matfrostarray!(io::BufferedStream, ::Type{String})
     read_matfrostarray_header!(io, MATLAB_STRING, Val{0}())
     read_string!(io)
 end
 
 
-function read_matlab!(io::BufferedStream, ::Type{Array{String,N}}) where {N}
+function read_matfrostarray!(io::BufferedStream, ::Type{Array{String,N}}) where {N}
     dims = read_matfrostarray_header!(io, MATLAB_STRING, Val{N}())
     arr = Array{String, N}(undef, dims)
     for i in eachindex(arr)
@@ -402,7 +402,7 @@ end
 
 
 
-@generated function read_matlab!(io::BufferedStream, ::Type{T}) where {T}
+@generated function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T}
     
     return quote
         read_matfrostarray_header!(io, STRUCT, Val{0}())
@@ -415,7 +415,7 @@ end
         end
         
         if (numfields_mat != length(fieldnames(T)) || !all(fieldname_in_type))
-            clear_matfrost_object!(io, numfields_mat)
+            clear_matfrostarray_object!(io, numfields_mat)
             throw("Fieldnames do not match")
         end
 
@@ -430,11 +430,11 @@ end
             try 
                 $((quote
                      if (fieldname == fieldnames(T)[$(i)])
-                        $(Symbol(:_lfv_, fieldnames(T)[i])) = read_matlab!(io, $(fieldtypes(T)[i]))
+                        $(Symbol(:_lfv_, fieldnames(T)[i])) = read_matfrostarray!(io, $(fieldtypes(T)[i]))
                     end
                 end for i in eachindex(fieldnames(T)))...)
             catch e
-                clear_matfrost_object!(io, numfields_mat - fn_i)
+                clear_matfrostarray_object!(io, numfields_mat - fn_i)
                 throw(e)
             end
         end
@@ -453,7 +453,7 @@ end
 end
 
 
-@generated function read_matlab!(io::BufferedStream, ::Type{Array{T,N}}) where {T,N}
+@generated function read_matfrostarray!(io::BufferedStream, ::Type{Array{T,N}}) where {T,N}
     
     return quote
         dims = read_matfrostarray_header!(io, STRUCT, Val{N}())
@@ -466,7 +466,7 @@ end
         end
         
         if (numfields_mat != length(fieldnames(T)) || !all(fieldname_in_type))
-            clear_matfrost_object!(io, numfields_mat*prod(dims))
+            clear_matfrostarray_object!(io, numfields_mat*prod(dims))
             throw("Fieldnames do not match")
         end
 
@@ -486,11 +486,11 @@ end
                     try 
                         $((quote
                             if (fieldname == fieldnames(T)[$(i)])
-                                $(Symbol(:_lfv_, fieldnames(T)[i])) = read_matlab!(io, $(fieldtypes(T)[i]))
+                                $(Symbol(:_lfv_, fieldnames(T)[i])) = read_matfrostarray!(io, $(fieldtypes(T)[i]))
                             end
                         end for i in eachindex(fieldnames(T)))...)
                     catch e
-                        clear_matfrost_object!(io, numfields_mat - fn_i)
+                        clear_matfrostarray_object!(io, numfields_mat - fn_i)
                         throw(e)
                     end
                 end
@@ -504,7 +504,7 @@ end
                 arr[eli] = T($((Symbol(:_lfva_, fieldnames(T)[i]) for i in eachindex(fieldnames(T)))...))
 
             catch e
-                clear_matfrost_object!(io, (prod(dims)-eli)*numfields_mat)
+                clear_matfrostarray_object!(io, (prod(dims)-eli)*numfields_mat)
                 throw(e)
             end
 
