@@ -383,6 +383,20 @@ function read_matlab!(io::BufferedStream, ::Type{Array{T,N}}) where {N, T <: Num
     arr
 end
 
+function read_matlab!(io::BufferedStream, ::Type{String})
+    read_matfrostarray_header!(io, MATLAB_STRING, Val{0}())
+    read_string!(io)
+end
+
+
+function read_matlab!(io::BufferedStream, ::Type{Array{String,N}}) where {N}
+    dims = read_matfrostarray_header!(io, MATLAB_STRING, Val{N}())
+    arr = Array{String, N}(undef, dims)
+    for i in eachindex(arr)
+        arr[i] = read_string!(io)
+    end
+    arr
+end
 
 
 
@@ -403,10 +417,12 @@ end
             throw("Fieldnames do not match")
         end
 
+        # Create local variables with type annotation, {Nothing, FieldType}
         $((quote
             $(Symbol(:_lfv_, fieldnames(T)[i])) :: Union{Nothing, $(fieldtypes(T)[i])} = nothing
         end for i in eachindex(fieldnames(T)))...)
 
+        # Parse each field value. Parsing must be done in the order of MATFrostSequence
         for fn_i in 1:length(fieldnames_mat)
             fieldname = fieldnames_mat[fn_i]
             try 
@@ -421,10 +437,12 @@ end
             end
         end
 
+        # Force {Nothing, FieldType} to FieldType
         $((quote
             $(Symbol(:_lfva_, fieldnames(T)[i])) :: $(fieldtypes(T)[i]) = $(Symbol(:_lfv_, fieldnames(T)[i]))
         end for i in eachindex(fieldnames(T)))...)
 
+        # Construct new struct
         T($((Symbol(:_lfva_, fieldnames(T)[i]) for i in eachindex(fieldnames(T)))...))
 
 

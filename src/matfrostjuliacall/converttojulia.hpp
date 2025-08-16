@@ -30,6 +30,24 @@ namespace MATFrost::ConvertToJulia {
 
     }
 
+    void write_string(const matlab::data::StringArray strarr, BufferedOutputStream& os) {
+        int32_t mattype = static_cast<int32_t>(strarr.getType());
+        auto dims = strarr.getDimensions();
+        size_t ndims = dims.size();
+
+        os.write(reinterpret_cast<const uint8_t *>(&mattype), sizeof(int32_t));
+        os.write(reinterpret_cast<const uint8_t *>(&ndims), sizeof(size_t));
+        os.write(reinterpret_cast<const uint8_t *>(dims.data()), sizeof(size_t)*ndims);
+
+        for (const matlab::data::MATLABString matstr: strarr) {
+            std::string str(matlab::engine::convertUTF16StringToUTF8String(matstr));
+            size_t strlen = str.size();
+            os.write(reinterpret_cast<const uint8_t *>(&strlen), sizeof(size_t));
+            os.write(reinterpret_cast<const uint8_t *>(str.data()), str.size());
+        }
+
+    }
+
     // std::unique_ptr<MATFrostArrayMemory> write_struct(const matlab::data::StructArray msarr, BufferedOutputStream& os) {
     //     std::unique_ptr<MATFrostArrayMemory> matfarr(new MATFrostArrayMemory());
     //
@@ -109,8 +127,8 @@ namespace MATFrost::ConvertToJulia {
              case matlab::data::ArrayType::STRUCT:
                 return write_struct(arr, os);
              //
-             // case matlab::data::ArrayType::MATLAB_STRING:
-             //     return convert_string(marr);
+             case matlab::data::ArrayType::MATLAB_STRING:
+                 return write_string(arr, os);
              case matlab::data::ArrayType::LOGICAL:
                  return write_primitive<bool>(arr, os);
 

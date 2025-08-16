@@ -33,6 +33,7 @@ struct StructTest
     a::Float64
     b::Int64
     c::Float64
+    d::String
 end
 function serve(h_stdin_num, h_stdout_num)
     Nel = 1000000 + 2*3 + 1
