@@ -54,18 +54,30 @@ function serve(h_stdin_num, h_stdout_num)
     out_buf  = _Stream.BufferedStream(h_stdout, Vector{UInt8}(undef, 2<<13), 0, 0)
 
     while true  
-        
-        t = _Stream.read!(in_buf, Int32)
-        ndimsv = _Stream.read!(in_buf, Int64)
-        
-        totsize = 1
-        for i=1:ndimsv
-            totsize *= _Stream.read!(in_buf, Int64)
+        # arr = _ConvertToJulia.read_matlab!(in_buf, Vector{Int32})
+
+        # _ConvertToMATLAB.write_matlab!(out_buf, arr)
+        try 
+            arr = _ConvertToJulia.read_matlab!(in_buf, Vector{Int32})
+
+            _ConvertToMATLAB.write_matlab!(out_buf, arr)
+        catch e
+            _ConvertToMATLAB.write_matlab!(out_buf, "Error")
         end
+        _Stream.flush!(out_buf)
+        # t = _Stream.read!(in_buf, Int32)
+        # ndimsv = _Stream.read!(in_buf, Int64)
+        
+        # totsize = 1
+        # for i=1:ndimsv
+        #     totsize *= _Stream.read!(in_buf, Int64)
+        # end
 
-        arr = Vector{Int32}(undef, totsize)
+        
 
-        _Stream.read!(in_buf, arr)
+        # arr = Vector{Int32}(undef, totsize)
+
+        # _Stream.read!(in_buf, arr)
 
 
         # _Stream.write!(out_buf, Int32(11))
@@ -78,19 +90,16 @@ function serve(h_stdin_num, h_stdout_num)
         # _ConvertToMATLAB.write_matlab!(out_buf, collect(5:1000))
         
         # _Stream.flush!(out_buf)
-        sarr = Array{String,3}(undef, 3,2,3)
-        for i in eachindex(sarr)
-            sarr[i] = "FFEF" * string(i)
-        end
+        # sarr = Array{String,3}(undef, 3,2,3)
+        # for i in eachindex(sarr)
+        #     sarr[i] = "FFEF" * string(i)
+        # end
         
-        _ConvertToMATLAB.write_matlab!(out_buf, (2334,4.0,3,"FEF"))
-
         # _ConvertToMATLAB.write_matlab!(out_buf, [StructTest(23.0, 33, "FFDF"), StructTest(23332.0, 3553, "2nd")])
 
         # _ConvertToMATLAB.write_matlab!(out_buf, collect(5:1000))
 
 
-        _Stream.flush!(out_buf)
         
         # write(stdout, convert(Int64, sum(arr)))
         # _stream.write!(out_buf, convert(Int64, sum(arr)))

@@ -1,5 +1,8 @@
 module _ConvertToJulia
 
+
+import ..MATFrost._Stream: read!, write!, flush!, BufferedStream, read_and_clear!
+
 using ..MATFrost: _MATFrostArray as MATFrostArray
 using ..MATFrost: _MATFrostException as MATFrostException
 # using ..MATFrost._Stream: BufferedStream, 
@@ -62,6 +65,8 @@ struct MATLABSingle  <: MATLABType end
 struct MATFrostArrayTyped{T <: MATLABType}
     mfa::MATFrostArray
 end
+
+
 
 
 type_compatible(::Type{Bool}, mfa::MATFrostArray) = mfa.type == LOGICAL
@@ -208,6 +213,246 @@ expected_matlab_type(::Type{Complex{UInt64}})   = "complex uint64"
 expected_matlab_type(::Type{Complex{Int64}})    = "complex int64"
 
 expected_matlab_type(::Type{Array{T, N}}) where {T <: Number, N} = expected_matlab_type(T)
+
+
+
+
+expected_matlab_type_id(::Type{T}) where {T} = STRUCT
+
+expected_matlab_type_id(::Type{T}) where {T<:Tuple} = CELL
+expected_matlab_type_id(::Type{T}) where {T<:Array{<:Union{Array,Tuple}}} = CELL
+
+expected_matlab_type_id(::Type{String}) = MATLAB_STRING
+
+expected_matlab_type_id(::Type{Float32}) = SINGLE
+expected_matlab_type_id(::Type{Float64}) = DOUBLE
+
+expected_matlab_type_id(::Type{UInt8})   = UINT8
+expected_matlab_type_id(::Type{Int8})    = INT8
+expected_matlab_type_id(::Type{UInt16})   = UINT16
+expected_matlab_type_id(::Type{Int16})    = INT16
+expected_matlab_type_id(::Type{UInt32})   = UINT32
+expected_matlab_type_id(::Type{Int32})    = INT32
+expected_matlab_type_id(::Type{UInt64})   = UINT64
+expected_matlab_type_id(::Type{Int64})    = INT64
+
+expected_matlab_type_id(::Type{Complex{Float32}}) = COMPLEX_SINGLE
+expected_matlab_type_id(::Type{Complex{Float64}}) = COMPLEX_DOUBLE
+
+expected_matlab_type_id(::Type{Complex{UInt8}})   = COMPLEX_UINT8
+expected_matlab_type_id(::Type{Complex{Int8}})    = COMPLEX_INT8
+expected_matlab_type_id(::Type{Complex{UInt16}})   = COMPLEX_UINT16
+expected_matlab_type_id(::Type{Complex{Int16}})    = COMPLEX_INT16
+expected_matlab_type_id(::Type{Complex{UInt32}})   = COMPLEX_UINT32
+expected_matlab_type_id(::Type{Complex{Int32}})    = COMPLEX_INT32
+expected_matlab_type_id(::Type{Complex{UInt64}})   = COMPLEX_UINT64
+expected_matlab_type_id(::Type{Complex{Int64}})    = COMPLEX_INT64
+
+
+const PRIMITIVE_TYPES_AND_SIZE = (
+    (LOGICAL, 1), 
+    (DOUBLE, 8), (SINGLE, 4), 
+    (INT8, 1), (UINT8, 1), (INT16, 2), (UINT16,2), (INT32,4), (UINT32,4), (INT64,8), (UINT64,8),
+    (COMPLEX_DOUBLE, 16), (COMPLEX_SINGLE,8),
+    (COMPLEX_INT8, 2), (COMPLEX_UINT8, 2), (COMPLEX_INT16, 4), (COMPLEX_UINT16,4), (COMPLEX_INT32,8), (COMPLEX_UINT32,8), (COMPLEX_INT64,16), (COMPLEX_UINT64,16),
+)
+
+
+function read_string!(io::BufferedStream) :: String
+    sarr = Vector{UInt8}(undef, read!(io, Int64))
+    read!(io, sarr)
+    transcode(String, sarr)
+end
+
+function clear_matfrost_object!(io::BufferedStream, numobjects::Int64 = 1)
+    while numobjects > 0
+        type = read!(io, Int32)
+        ndims = read!(io, Int64)
+        nel = 1
+
+        for _ in 1:ndims
+            nel *= read!(io, Int64)
+        end
+
+        if type == STRUCT
+            nfields = read!(io, Int64)
+            for _ in 1:nfields
+                nb = read!(io, Int64)
+                read_and_clear!(io, nb)
+            end
+            numobjects += nfields * nel
+        elseif type == CELL
+            numobjects += nel
+        elseif type == MATLAB_STRING
+            for _ in 1:nel
+                nb = read!(io, Int64)
+                read_and_clear!(io, nb)
+            end
+        else
+            for (prim_type, prim_size) in PRIMITIVE_TYPES_AND_SIZE
+                if prim_type == type
+                    nb = prim_size*nel
+                    read_and_clear!(io, nb)
+                end
+            end
+        end
+        numobjects -= 1
+    end
+    nothing
+end
+
+
+
+
+function read_matfrostarray_header!(io::BufferedStream, expected_type::Int32, ::Val{N}) :: NTuple{N, Int64} where {N}
+    type = read!(io, Int32)
+
+    incompatible_datatypes = type != expected_type
+
+    ndims_mat = read!(io, Int64)
+
+    dims = ntuple(Val{N}()) do i
+        if i <= ndims_mat
+            return read!(io, Int64)
+        else
+            return 1
+        end
+    end
+
+    nel = 1
+
+    incompatible_array_dimension = false
+
+    for _ in (N+1):ndims_mat
+        dim = read!(io, Int64)
+        nel *= dim
+        if dim > 1
+            incompatible_array_dimension = true
+        end
+    end
+
+    if incompatible_datatypes || incompatible_array_dimension
+
+        for dim in dims
+            nel *= dim
+        end
+
+        if type == STRUCT
+            nfields = read!(io, Int64)
+            for _ in 1:nfields
+                nb = read!(io, Int64)
+                read_and_clear!(io, nb)
+            end
+            clear_matfrost_object!(io, nfields * nel)
+        elseif type == CELL
+            clear_matfrost_object!(io, nel)
+        elseif type == MATLAB_STRING
+            for _ in 1:nel
+                nb = read!(io, Int64)
+                read_and_clear!(io, nb)
+            end
+        else
+            for (prim_type, prim_size) in PRIMITIVE_TYPES_AND_SIZE
+                if prim_type == type
+                    nb = prim_size*nel
+                    read_and_clear!(io, nb)
+                end
+            end
+        end
+
+        throw("Not working")
+
+    end
+
+
+
+
+    return dims
+end
+
+
+function read_matlab!(io::BufferedStream, ::Type{T}) where {T <: Number}
+    read_matfrostarray_header!(io, expected_matlab_type_id(T), Val{0}())
+    read!(io, T)
+end
+
+function read_matlab!(io::BufferedStream, ::Type{Array{T,N}}) where {N, T <: Number}
+    dims = read_matfrostarray_header!(io, expected_matlab_type_id(T), Val{N}())
+    arr = Array{T,N}(undef, dims)
+    read!(io, arr)
+    arr
+end
+
+
+
+
+@generated function read_matlab(io::BufferedStream, ::Type{T}) where {T}
+
+    quote
+        dims = read_matfrostarray_header!(io, STRUCT, Val{0}())
+        
+    end
+end
+
+
+
+
+
+# function assert_type_and_is_scalar(io::BufferedStream, expected_type::Int32)
+
+# end
+
+
+
+
+
+
+
+# struct TestA
+#     a::Float64
+#     b::Int64
+#     c::String
+# end
+
+# function read_matlab!(io::BufferedStream, ::Type{TestA})
+#     type = read!(io, Int32)
+#     ndims = read!(io, Int64)
+#     # dims = ntuple(_ -> read!(io, Int64), Val{N}())
+#     for _ in 1:(ndims)
+#         read!(io,Int64)
+#     end
+
+#     numfields_mat = read!(io, Int64)
+#     fieldnames_string_mat = [read_string!(io) for _ in 1:numfields_mat]
+#     fieldnames_mat = Symbol(fieldnames_string_mat)
+
+#     # ft1 :: Union{Nothing, Int64} = nothing
+
+#     _field_a :: Union{Float64, Nothing} = nothing
+#     _field_b :: Union{Int64, Nothing} = nothing
+#     _field_c :: Union{String, Nothing} = nothing
+
+
+#     for fieldname_mat in fieldnames_mat
+#         if fieldname_mat == :a
+#             _field_a = read_matlab!(io, Float64)
+#         elseif fieldname_mat == :b
+#             _field_b = read_matlab!(io, Int64)
+#         elseif fieldname_mat == :c
+#             _field_c = read_matlab!(io, String) 
+#         end
+#     end
+
+#     _field_a_act :: Float64 = _field_a
+#     _field_b_act :: Int64 = _field_b
+#     _field_c_act :: String = _field_c
+
+#     TestA(_field_a_act, _field_b_act, _field_c_act)
+
+
+# end
+
+
 
 function incompatible_datatypes_exception(::Type{T}, mfa::MATFrostArray) where {T}
     MATFrostException(

@@ -164,6 +164,7 @@ function write_matlab!(io::BufferedStream, structval::T) where {T}
     write!(io, Int64(1)) # size dim1
 
     write!(io, Int64(length(fieldnames(T)))) # numfields
+    
     for fieldname in fieldnames(T)
         fns = string(fieldname)
         write!(io, Int64(ncodeunits(fns)))
@@ -210,112 +211,18 @@ function write_matlab!(io::BufferedStream, tup::T) where {T<:Tuple}
     nothing
 end
 
-function write_matlab!(io::BufferedStream, arr::Array{T,N}) where {N,T}
-    write!(io, CELL)
-    write!(io, Int64(N)) # ndims
-    for i in 1:N
-        write!(io, Int64(size(arr, i)))
-    end
-
-    for el in arr
-        write_matlab!(io, el)
-    end
-
-    nothing
-end
-
-
-# function write_matlab!(arr::Array{T,N}) where{N, T <: Number}
-#     println("test1")
-#     println("test2")
-    
+# function write_matlab!(io::BufferedStream, t::T) where {T <: Tuple}
+#     write!(io, CELL)
+#     write!(io, Int64(length(fieldnames(T)))) # ndims
 #     for i in 1:N
-#         println("test1" * string(size(arr, i)))
+#         write!(io, Int64(size(arr, i)))
 #     end
-#     println("test")
+
+#     for el in arr
+#         write_matlab!(io, el)
+#     end
+
+#     nothing
 # end
-
-
-
-
-function convert(el::T) where {T <: Number}
-    MATFrostArrayMemory{1, T, 0}(array_type(T), (Csize_t(1),), el, ())
-end
-
-function convert(arr::Array{T, N}) where {T <: Number, N}
-    MATFrostArrayMemory{N, Array{T, N}, 0}(array_type(T), Csize_t.(size(arr)), arr, reinterpret(Ptr{Cvoid}, pointer(arr)), ())
-end
-
-function convert(s::String)
-    MATFrostArrayMemory{1, Tuple{Cstring, String}, 0}(MATLAB_STRING, (Csize_t(1),), (Cstring(pointer(s)), s), ())
-end
-
-
-
-
-function convert(sarr::Array{String, N}) where {N}
-    sarr_cstr = sarr .|> (s-> Cstring(pointer(s)))
-
-    MATFrostArrayMemory{N, Tuple{Array{Cstring, N}, Array{String, N}}, 0}(
-        MATLAB_STRING, Csize_t.(size(sarr)), (sarr_cstr, sarr), reinterpret(Ptr{Cvoid}, pointer(sarr_cstr)), ()
-    )
-end
-
-
-function convert(tup::T) where {T<:Tuple}
-
-    subarrays = convert.(tup)  
-    subarrays_ptr = subarrays .|> (sa -> pointer_from_objref(sa))
-
-    data = (subarrays_ptr, subarrays)
-
-    MATFrostArrayMemory{1, typeof(data), 0}(CELL, (Csize_t(length(tup)),), data, ())
-
-end
-
-function convert(arr::Array{T, N}) where {T<:Union{Array, Tuple}, N}
-
-    subarrays = convert.(arr)  
-    subarrays_ptr = subarrays .|> (sa -> pointer_from_objref(sa))
-
-    data = (subarrays_ptr, subarrays)
-    MATFrostArrayMemory{N, typeof(data), 0}(CELL, Csize_t.(size(arr)), data, reinterpret(Ptr{Cvoid}, pointer(subarrays_ptr)), ())
-end
-
-
-function convert(structval::T) where {T}
-
-    subarrays = convert.((fieldnames(T) .|> fn->getfield(structval,fn)))
-    subarrays_ptr = subarrays .|> (sa -> pointer_from_objref(sa))
-
-    data = (subarrays_ptr, subarrays)
-
-    MATFrostArrayMemory{1, typeof(data), length(fieldnames(T))}(
-        STRUCT, (Csize_t(1),), data, Base.unsafe_convert.(Cstring, fieldnames(T))
-    )
-
-
-end
-
-function convert(structvals::Array{T, N}) where {T, N}
-
-    subarrays = structvals .|> (structval -> convert.((fieldnames(T) .|> fn->getfield(structval, fn))))
-    subarrays_ptr = subarrays .|> (structval -> pointer_from_objref.(structval))
-    
-    data = (subarrays_ptr, subarrays)
-    MATFrostArrayMemory{N, typeof(data), length(fieldnames(T))}(
-        STRUCT, Csize_t.(size(structvals)), data, reinterpret(Ptr{Cvoid}, pointer(subarrays_ptr)), Base.unsafe_convert.(Cstring, fieldnames(T))
-    )
-
-end
-
-convert_c() = @cfunction(convert, Any, (Any,))
-
-
-matfrostarray(mfam) = mfam.matfrostarray
-
-matfrostarray_c() = @cfunction(matfrostarray, MATFrostArray, (Any,))
-
-
 
 end

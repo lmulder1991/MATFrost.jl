@@ -66,6 +66,7 @@ namespace MATFrost::ConvertToMATLAB {
         }
         return carr;
     }
+
     matlab::data::Array read_struct(BufferedInputStream& is, matlab::data::ArrayDimensions dims) {
         size_t nel = 1;
         for (const auto dim : dims){
