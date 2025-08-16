@@ -359,8 +359,10 @@ function read_matfrostarray_header!(io::BufferedStream, expected_type::Int32, ::
                 end
             end
         end
-
-        throw("Not working")
+        
+        throw("Not working: \n" * 
+        "type:" * string(type) * " Expected type: " * string(expected_type) *
+        "\ndims: " * string(dims) * ", " * string(nel))
 
     end
 

@@ -35,6 +35,11 @@ struct StructTest
     c::Float64
     d::String
 end
+
+struct StructTestNest
+    a::StructTest
+    b::StructTest
+end
 function serve(h_stdin_num, h_stdout_num)
     Nel = 1000000 + 2*3 + 1
     buf = Vector{Int32}(undef, Nel)
@@ -61,7 +66,7 @@ function serve(h_stdin_num, h_stdout_num)
         try 
             
         # arr = _ConvertToJulia.read_matlab!(in_buf, Vector{Int32})
-            arr = _ConvertToJulia.read_matlab!(in_buf, StructTest)
+            arr = _ConvertToJulia.read_matlab!(in_buf, StructTestNest)
 
             _ConvertToMATLAB.write_matlab!(out_buf, arr)
         catch e
