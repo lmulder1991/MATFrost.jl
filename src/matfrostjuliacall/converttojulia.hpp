@@ -98,7 +98,7 @@ namespace MATFrost::ConvertToJulia {
                  return write_cell(arr, os);
              case matlab::data::ArrayType::STRUCT:
                 return write_struct(arr, os);
-             
+
              case matlab::data::ArrayType::MATLAB_STRING:
                  return write_string(arr, os);
              case matlab::data::ArrayType::LOGICAL:

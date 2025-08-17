@@ -319,24 +319,41 @@ function read_matfrostarray_header!(io::BufferedStream, expected_type::Int32, ::
         end
     end
 
-    nel = 1
+    nel = prod(dims; init=1)
 
     incompatible_array_dimension = false
 
     for _ in (N+1):ndims_mat
         dim = read!(io, Int64)
         nel *= dim
-        if (dim > 1) | ((N == 0) & (dim != 1))
+    end
+
+    if (N > 0) # Array behavior
+        if (prod(dims; init=1) != nel)
+            incompatible_array_dimension = true
+        elseif (nel == 0) 
+            # Special behavior if nel==0. For this case allow any datatype input. 
+            # MATLAB does not act strict on the datatype of empty values.
+
+            incompatible_datatypes = false
+            incompatible_array_dimension = false
+
+            if type == STRUCT
+                nfields = read!(io, Int64)
+                for _ in 1:nfields
+                    nb = read!(io, Int64)
+                    read_and_clear!(io, nb)
+                end
+            end
+        end
+    elseif (N==0) # Scalar behavior
+        if (nel != 1)
             incompatible_array_dimension = true
         end
     end
 
-    if incompatible_datatypes || incompatible_array_dimension
 
-        for dim in dims
-            nel *= dim
-        end
-
+    if (incompatible_datatypes | incompatible_array_dimension)
         if type == STRUCT
             nfields = read!(io, Int64)
             for _ in 1:nfields
@@ -365,7 +382,6 @@ function read_matfrostarray_header!(io::BufferedStream, expected_type::Int32, ::
         "\ndims: " * string(dims) * ", " * string(nel))
 
     end
-
 
 
 
@@ -401,6 +417,26 @@ function read_matfrostarray!(io::BufferedStream, ::Type{Array{String,N}}) where 
 end
 
 
+@generated function read_matfrostarray!(io::BufferedStream, ::Type{Array{Array{T,M}, N}}) where {T,N,M}
+    return quote
+        dims = read_matfrostarray_header!(io, CELL, Val{N}())
+        arr = Array{Array{T,M}, N}(undef, dims)
+        for i in eachindex(arr)
+            try
+                arr[i] = read_matfrostarray!(io, Array{T,M})
+            catch e
+                clear_matfrostarray_object!(io, prod(dims; init=1) - i)
+                throw(e)
+            end
+        end
+        arr
+    end
+end
+
+
+"""
+Read a tuple object.
+"""
 @generated function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T <: Tuple}
     
     return quote
@@ -449,7 +485,9 @@ function read_matrfrostarray_struct_header!(io::BufferedStream, expected_fieldna
     return fieldnames_mat
 end
 
-
+"""
+Read a scalar struct object.
+"""
 @generated function read_matfrostarray_struct_object!(io::BufferedStream, fieldnames_mat::Vector{Symbol}, ::Type{T}) where{T}
     quote
         # Create local variables with type annotation, {Nothing, FieldType}
@@ -482,9 +520,17 @@ end
     end
 end
 
-
+"""
+Read scalar struct object from MATFrostArray
+"""
 @generated function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T}
-    
+    if isabstracttype(T)
+        return quote
+            clear_matfrostarray_object!(io)
+            throw("Interface contains abstract type: " * string(T))
+        end
+    end
+
     return quote
         read_matfrostarray_header!(io, STRUCT, Val{0}())
         fieldnames_mat = read_matrfrostarray_struct_header!(io, fieldnames(T), 1)
@@ -495,12 +541,30 @@ end
 
 end
 
-
+"""
+Read array of struct objects from MATFrostArray
+"""
 @generated function read_matfrostarray!(io::BufferedStream, ::Type{Array{T,N}}) where {T,N}
-    
+    if isabstracttype(T)
+        return quote
+            clear_matfrostarray_object!(io)
+            throw("Interface contains abstract type: " * string(T))
+        end
+    end
+
+
     return quote
         dims = read_matfrostarray_header!(io, STRUCT, Val{N}())
-        fieldnames_mat = read_matrfrostarray_struct_header!(io, fieldnames(T), prod(dims))
+
+        nel = prod(dims; init=1)
+
+        if nel == 0 
+            # Special behavior for empty arrays. 
+            # The matfrostarray object has already been cleared in read_matfrostarray_header!
+            return Array{T,N}(undef, dims)
+        end
+        
+        fieldnames_mat = read_matrfrostarray_struct_header!(io, fieldnames(T), nel)
 
         arr = Array{T,N}(undef, dims)
         
@@ -508,7 +572,7 @@ end
             try
                 arr[eli] = read_matfrostarray_struct_object!(io, fieldnames_mat, T)
             catch e
-                clear_matfrostarray_object!(io, (prod(dims)-eli)*length(fieldnames_mat))
+                clear_matfrostarray_object!(io, (nel-eli)*length(fieldnames_mat))
                 throw(e)
             end
         end
