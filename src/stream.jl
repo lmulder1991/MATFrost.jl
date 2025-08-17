@@ -143,7 +143,7 @@ end
 
 const CLEAR_BUFFER = Vector{UInt8}(undef, 2 << 14) # This buffer is used to clear the MATFrost object transmitted over the PIPE.
 
-function read_and_clear!(io::BufferedStream, nb::Int64)
+function discard!(io::BufferedStream, nb::Int64)
     br = 0
     lbuf = length(CLEAR_BUFFER)
     pbuf = pointer(CLEAR_BUFFER)

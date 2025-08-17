@@ -1,7 +1,7 @@
 module _Read
 
 
-import ..MATFrost._Stream: read!, write!, flush!, BufferedStream, read_and_clear!
+import ..MATFrost._Stream: read!, write!, flush!, BufferedStream, discard!
 
 using ..MATFrost: _MATFrostException as MATFrostException
 # using ..MATFrost: _MATFrostArray as MATFrostArray
@@ -250,6 +250,8 @@ expected_matlab_type(::Type{Complex{Int32}})    = COMPLEX_INT32
 expected_matlab_type(::Type{Complex{UInt64}})   = COMPLEX_UINT64
 expected_matlab_type(::Type{Complex{Int64}})    = COMPLEX_INT64
 
+expected_matlab_type(::Type{Array{T, N}}) where {T <: Number, N} = expected_matlab_type(T)
+
 
 const PRIMITIVE_TYPES_AND_SIZE = (
     (LOGICAL, 1), 
@@ -266,7 +268,14 @@ function read_string!(io::BufferedStream) :: String
     transcode(String, sarr)
 end
 
-function clear_matfrostarray_object!(io::BufferedStream, numobjects::Int64 = 1)
+
+
+
+"""
+This function will read a specified number of matfrostarray objects from stream and discard the data.
+Used in cases of errors to keep the connection state correct.
+"""
+function discard_matfrostarray!(io::BufferedStream, numobjects::Int64 = 1)
     while numobjects > 0
         type = read!(io, Int32)
         ndims = read!(io, Int64)
@@ -280,7 +289,7 @@ function clear_matfrostarray_object!(io::BufferedStream, numobjects::Int64 = 1)
             nfields = read!(io, Int64)
             for _ in 1:nfields
                 nb = read!(io, Int64)
-                read_and_clear!(io, nb)
+                discard!(io, nb)
             end
             numobjects += nfields * nel
         elseif type == CELL
@@ -288,30 +297,57 @@ function clear_matfrostarray_object!(io::BufferedStream, numobjects::Int64 = 1)
         elseif type == MATLAB_STRING
             for _ in 1:nel
                 nb = read!(io, Int64)
-                read_and_clear!(io, nb)
+                discard!(io, nb)
             end
         else
             for (prim_type, prim_size) in PRIMITIVE_TYPES_AND_SIZE
                 if prim_type == type
                     nb = prim_size*nel
-                    read_and_clear!(io, nb)
+                    discard!(io, nb)
                 end
             end
         end
+        
         numobjects -= 1
     end
     nothing
 end
 
+"""
+Discard a matfrostarray with a stream that has read the header and will
+start from the body of a matfrostarray.
+
+NOTE: Very similar to `discard_matfrostarray`
+"""
+function discard_matfrostarray_body!(io::BufferedStream, type::Int32, nel::Int64)
+    if type == STRUCT
+        nfields = read!(io, Int64)
+        for _ in 1:nfields
+            nb = read!(io, Int64)
+            discard!(io, nb)
+        end
+        discard_matfrostarray!(io, nfields * nel)
+    elseif type == CELL
+        discard_matfrostarray!(io, nel)
+    elseif type == MATLAB_STRING
+        for _ in 1:nel
+            nb = read!(io, Int64)
+            discard!(io, nb)
+        end
+    else
+        for (prim_type, prim_size) in PRIMITIVE_TYPES_AND_SIZE
+            if prim_type == type
+                nb = prim_size*nel
+                discard!(io, nb)
+            end
+        end
+    end
+end
 
 
-
-function read_matfrostarray_header!(io::BufferedStream, expected_type::Int32, ::Val{N}) :: NTuple{N, Int64} where {N}
+function read_matfrostarray_header3!(io::BufferedStream, ::Val{N}) :: Tuple{Int32, Int64, Int64, NTuple{N, Int64}, NTuple{4,Int64}} where {N}
     type = read!(io, Int32)
-
-    incompatible_datatypes = type != expected_type
-    incompatible_array_dimension = false
-
+   
     ndims_mat = read!(io, Int64)
 
     dims = ntuple(Val{N}()) do i
@@ -322,16 +358,136 @@ function read_matfrostarray_header!(io::BufferedStream, expected_type::Int32, ::
         end
     end
 
-    neldims = prod(dims; init=1)
-    nel = neldims
+    matdims = ntuple(Val{4}()) do i
+        if (i+N) <= ndims_mat
+            return read!(io, Int64)
+        else
+            return 1
+        end
+    end
+    
+    nel = prod(dims; init=1)*prod(matdims)
 
-    for _ in (N+1):ndims_mat
+    for _ in (N+4+1):ndims_mat
         dim = read!(io, Int64)
         nel *= dim
     end
 
+    (type, ndims_mat, nel, dims, matdims)
+end
+
+
+# function read_matfrostarray_header4!(io::BufferedStream, ::Type{Array{T,N}}) where {T,N}
+
+#     (type, nel, dims) = read_matfrostarray_header3!(io, Val{N}())
+
+
+# end
+
+
+
+# function incompatible_array_dimensions_exception(::Type{T}, mfa::MATFrostArray) where {T}
+#     actual_shape = join((string(unsafe_load(mfa.dims, i)) for i in 1:mfa.ndims), ", ")
+    
+#     actual_numdims = maximum(ifelse(unsafe_load(mfa.dims, i) != 1, i, 0) for i in 1:mfa.ndims)
+
+#     expected_array_dimensions = ifelse(ndims(T) == 1,
+#         "1 (column-vector); dimensions=(:, 1)", 
+#         "$(ndims(T)); dimensions=($( join((":" for _ in 1:ndims(T)), ", ") ))")
+
+#     MATFrostException(
+#         "matfrostjulia:conversion:incompatibleArrayDimensions",
+# """
+# Converting to: $(string(T)) 
+
+# Array dimensions incompatible:
+#     Actual array dimensions:   numdims=$(string(actual_numdims)); dimensions=($(actual_shape))
+#     Expected array dimensions: numdims=$(expected_array_dimensions)
+# """)
+# end
+function incompatible_datatypes_exception(::Type{T}, type::Int32) where {T}
+    MATFrostException(
+        "matfrostjulia:conversion:incompatibleDatatypes",
+"""
+Converting to: $(T) 
+
+Incompatible datatypes conversion:
+    Actual MATLAB type:   $(array_type_name(type))[]
+    Expected MATLAB type: $(expected_matlab_type_name(T))[]
+""")
+end
+
+
+function incompatible_array_dimensions_exception(::Type{Array{T,N}}, ndims_mat::Int64, dimsmat::NTuple{M,Int64}) where {T,N, M}
+
+    for i in 1:(min(M, ndims_mat))
+        
+    end
+
+    dimsprint = ((string(dimsmat[i]) * ", ") for i in 1:min(M, ndims_mat))
+
+    MATFrostException(
+        "matfrostjulia:conversion:incompatibleArrayDimensions",
+"""
+Converting to: $(string(Array{T,N})) 
+
+Array dimensions incompatible:
+    Actual array dimensions:   numdims=$(ndims_mat); dimensions=($(dimsprint...))
+    Expected array dimensions: numdims=$(N)
+""")
+end
+
+
+
+# function read_matfrostarray_header2!(io::BufferedStream, ::Type{T})
+
+# end
+function read_matfrostarray_header!(io::BufferedStream, ::Type{Array{T,N}}) :: NTuple{N, Int64} where {T,N}
+
+    (type, ndims_mat, nel, dims, matdims) = read_matfrostarray_header3!(io, Val{N}())
+
+
+    expected_type = expected_matlab_type(Array{T,N})
+
+    # incompatible_datatypes = type != expected_type
+    # incompatible_array_dimension = false
+
+    if (prod(dims; init=1) != nel)
+        discard_matfrostarray_body!(io, type, nel)
+        throw(incompatible_array_dimensions_exception(Array{T,N}, ndims_mat, (dims..., matdims...)))
+    elseif (nel == 0) 
+        # Special behavior if nel==0. For this case allow any datatype input. 
+        # MATLAB does not act strict on the datatype of empty values.
+
+        incompatible_datatypes = false
+        incompatible_array_dimension = false
+
+        if type == STRUCT
+            nfields = read!(io, Int64)
+            for _ in 1:nfields
+                nb = read!(io, Int64)
+                discard!(io, nb)
+            end
+        end
+    elseif (type != expected_type)
+        discard_matfrostarray_body!(io, type, nel)
+        throw(incompatible_datatypes_exception(Array{T,N}, type))
+    end
+
+
+    return dims
+end
+
+function read_matfrostarray_header!(io::BufferedStream, expected_type::Int32, ::Val{N}) :: NTuple{N, Int64} where {N}
+
+    (type, ndims_mat, nel, dims, matdims) =  read_matfrostarray_header3!(io, Val{N}())
+
+
+    incompatible_datatypes = type != expected_type
+    incompatible_array_dimension = false
+
     if (N > 0) # Array behavior
-        if (neldims != nel)
+        if (prod(dims; init=1) != nel)
             incompatible_array_dimension = true
         elseif (nel == 0) 
             # Special behavior if nel==0. For this case allow any datatype input. 
@@ -344,7 +500,7 @@ function read_matfrostarray_header!(io::BufferedStream, expected_type::Int32, ::
                 nfields = read!(io, Int64)
                 for _ in 1:nfields
                     nb = read!(io, Int64)
-                    read_and_clear!(io, nb)
+                    discard!(io, nb)
                 end
             end
         end
@@ -356,29 +512,9 @@ function read_matfrostarray_header!(io::BufferedStream, expected_type::Int32, ::
 
 
     if (incompatible_datatypes | incompatible_array_dimension)
-        if type == STRUCT
-            nfields = read!(io, Int64)
-            for _ in 1:nfields
-                nb = read!(io, Int64)
-                read_and_clear!(io, nb)
-            end
-            clear_matfrostarray_object!(io, nfields * nel)
-        elseif type == CELL
-            clear_matfrostarray_object!(io, nel)
-        elseif type == MATLAB_STRING
-            for _ in 1:nel
-                nb = read!(io, Int64)
-                read_and_clear!(io, nb)
-            end
-        else
-            for (prim_type, prim_size) in PRIMITIVE_TYPES_AND_SIZE
-                if prim_type == type
-                    nb = prim_size*nel
-                    read_and_clear!(io, nb)
-                end
-            end
-        end
-        
+        discard_matfrostarray_body!(io, type, nel)
+
+
         throw("Not working: \n" * 
         "type:" * string(type) * " Expected type: " * string(expected_type) *
         "\ndims: " * string(dims) * ", " * string(nel))
@@ -397,7 +533,7 @@ function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T <: Number}
 end
 
 function read_matfrostarray!(io::BufferedStream, ::Type{Array{T,N}}) where {N, T <: Number}
-    dims = read_matfrostarray_header!(io, expected_matlab_type(T), Val{N}())
+    dims = read_matfrostarray_header!(io, Array{T,N})
     arr = Array{T,N}(undef, dims)
     read!(io, arr)
     arr
@@ -427,7 +563,7 @@ end
             try
                 arr[i] = read_matfrostarray!(io, Array{T,M})
             catch e
-                clear_matfrostarray_object!(io, prod(dims; init=1) - i)
+                discard_matfrostarray!(io, prod(dims; init=1) - i)
                 throw(e)
             end
         end
@@ -446,7 +582,7 @@ Read a tuple object.
         dim = read_matfrostarray_header!(io, CELL, Val{1}())
 
         if (dim[1] != length(fieldnames(T)))
-            clear_matfrostarray_object!(io, dim[1])
+            discard_matfrostarray!(io, dim[1])
             throw("Cell does not contain amount of expected values:")
         end
 
@@ -459,7 +595,7 @@ Read a tuple object.
             
             return T(($((Symbol(:_v, i) for i in eachindex(fieldnames(T)))...),))
         catch e
-            clear_matfrostarray_object!(io, length(fieldnames(T)) - fi)
+            discard_matfrostarray!(io, length(fieldnames(T)) - fi)
             throw(e)
         end
 
@@ -479,7 +615,7 @@ function read_matrfrostarray_struct_header!(io::BufferedStream, expected_fieldna
     end
     
     if (numfields_mat != N || !all(fieldname_in_type))
-        clear_matfrostarray_object!(io, nel*numfields_mat)
+        discard_matfrostarray!(io, nel*numfields_mat)
         throw("Fieldnames do not match: \nExpected: " * string(expected_fieldnames) *
             "\nRecieved: " * string(fieldnames_mat))
     end
@@ -507,7 +643,7 @@ Read a scalar struct object.
                     end
                 end for i in eachindex(fieldnames(T)))...)
             catch e
-                clear_matfrostarray_object!(io, length(fieldnames(T)) - fn_i)
+                discard_matfrostarray!(io, length(fieldnames(T)) - fn_i)
                 throw(e)
             end
         end
@@ -534,7 +670,7 @@ Read scalar struct object from MATFrostArray
 @generated function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T}
     if isabstracttype(T)
         return quote
-            clear_matfrostarray_object!(io)
+            discard_matfrostarray!(io)
             throw("Interface contains abstract type: " * string(T))
         end
     end
@@ -555,7 +691,7 @@ Read array of struct objects from MATFrostArray
 @generated function read_matfrostarray!(io::BufferedStream, ::Type{Array{T,N}}) where {T,N}
     if isabstracttype(T)
         return quote
-            clear_matfrostarray_object!(io)
+            discard_matfrostarray!(io)
             throw("Interface contains abstract type: " * string(T))
         end
     end
@@ -580,7 +716,7 @@ Read array of struct objects from MATFrostArray
             try
                 arr[eli] = read_matfrostarray_struct_object!(io, fieldnames_mat, T)
             catch e
-                clear_matfrostarray_object!(io, (nel-eli)*length(fieldnames_mat))
+                discard_matfrostarray!(io, (nel-eli)*length(fieldnames_mat))
                 throw(e)
             end
         end
