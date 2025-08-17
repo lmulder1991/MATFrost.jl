@@ -418,12 +418,7 @@ Incompatible datatypes conversion:
 end
 
 
-function incompatible_array_dimensions_exception(::Type{Array{T,N}}, ndims_mat::Int64, dimsmat::NTuple{M,Int64}) where {T,N, M}
-
-    for i in 1:(min(M, ndims_mat))
-        
-    end
-
+function incompatible_array_dimensions_exception(::Type{Array{T,N}}, nel::Int64,  ndims_mat::Int64, dimsmat::NTuple{M,Int64}) where {T,N, M}
     dimsprint = ((string(dimsmat[i]) * ", ") for i in 1:min(M, ndims_mat))
 
     MATFrostException(
@@ -432,13 +427,48 @@ function incompatible_array_dimensions_exception(::Type{Array{T,N}}, ndims_mat::
 Converting to: $(string(Array{T,N})) 
 
 Array dimensions incompatible:
+    Actual array numel:        $(nel)
     Actual array dimensions:   numdims=$(ndims_mat); dimensions=($(dimsprint...))
     Expected array dimensions: numdims=$(N)
 """)
 end
 
+function not_scalar_value_exception(::Type{T}, nel::Int64, ndims_mat::Int64, dimsmat::NTuple{M,Int64}) where {T, M}
+    # actual_shape = join((string(unsafe_load(mfa.dims, i)) for i in 1:mfa.ndims), ", ")
+    dimsprint = ((string(dimsmat[i]) * ", ") for i in 1:min(M, ndims_mat))
+
+    MATFrostException(
+        "matfrostjulia:conversion:notScalarValue",
+"""
+Converting to: $(T) 
+
+Not scalar value:
+    Actual array numel:        $(nel)
+    Actual array dimensions:   ($(dimsprint...)) 
+    Expected array dimensions: (1, 1)
+""")
+end
 
 
+function read_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: Tuple{} where {T}
+
+    (type, ndims_mat, nel, dims, matdims) = read_matfrostarray_header3!(io, Val{0}())
+
+
+    expected_type = expected_matlab_type(T)
+
+
+    if (nel != 1)
+        discard_matfrostarray_body!(io, type, nel)
+        throw(not_scalar_value_exception(T, nel, ndims_mat, matdims))
+    elseif (type != expected_type)
+        discard_matfrostarray_body!(io, type, nel)
+        throw(incompatible_datatypes_exception(T, type))
+    end
+
+
+    return ()
+end
 # function read_matfrostarray_header2!(io::BufferedStream, ::Type{T})
 
 # end
@@ -454,13 +484,10 @@ function read_matfrostarray_header!(io::BufferedStream, ::Type{Array{T,N}}) :: N
 
     if (prod(dims; init=1) != nel)
         discard_matfrostarray_body!(io, type, nel)
-        throw(incompatible_array_dimensions_exception(Array{T,N}, ndims_mat, (dims..., matdims...)))
+        throw(incompatible_array_dimensions_exception(Array{T,N}, nel, ndims_mat, (dims..., matdims...)))
     elseif (nel == 0) 
         # Special behavior if nel==0. For this case allow any datatype input. 
         # MATLAB does not act strict on the datatype of empty values.
-
-        incompatible_datatypes = false
-        incompatible_array_dimension = false
 
         if type == STRUCT
             nfields = read!(io, Int64)
@@ -478,57 +505,30 @@ function read_matfrostarray_header!(io::BufferedStream, ::Type{Array{T,N}}) :: N
     return dims
 end
 
-function read_matfrostarray_header!(io::BufferedStream, expected_type::Int32, ::Val{N}) :: NTuple{N, Int64} where {N}
+function read_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: NTuple{1, Int64} where {T <: Tuple}
 
-    (type, ndims_mat, nel, dims, matdims) =  read_matfrostarray_header3!(io, Val{N}())
-
-
-    incompatible_datatypes = type != expected_type
-    incompatible_array_dimension = false
-
-    if (N > 0) # Array behavior
-        if (prod(dims; init=1) != nel)
-            incompatible_array_dimension = true
-        elseif (nel == 0) 
-            # Special behavior if nel==0. For this case allow any datatype input. 
-            # MATLAB does not act strict on the datatype of empty values.
-
-            incompatible_datatypes = false
-            incompatible_array_dimension = false
-
-            if type == STRUCT
-                nfields = read!(io, Int64)
-                for _ in 1:nfields
-                    nb = read!(io, Int64)
-                    discard!(io, nb)
-                end
-            end
-        end
-    elseif (N==0) # Scalar behavior
-        if (nel != 1)
-            incompatible_array_dimension = true
-        end
-    end
+    (type, ndims_mat, nel, dims, matdims) = read_matfrostarray_header3!(io, Val{1}())
 
 
-    if (incompatible_datatypes | incompatible_array_dimension)
+    expected_type = expected_matlab_type(T)
+
+
+    if (dims[1] != length(fieldnames(T)))
         discard_matfrostarray_body!(io, type, nel)
-
-
-        throw("Not working: \n" * 
-        "type:" * string(type) * " Expected type: " * string(expected_type) *
-        "\ndims: " * string(dims) * ", " * string(nel))
-
+        throw("Tuple error size does not match")
+    elseif (type != expected_type)
+        discard_matfrostarray_body!(io, type, nel)
+        throw(incompatible_datatypes_exception(T, type))
     end
-
 
 
     return dims
 end
 
 
+
 function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T <: Number}
-    read_matfrostarray_header!(io, expected_matlab_type(T), Val{0}())
+    read_matfrostarray_header!(io, T)
     read!(io, T)
 end
 
@@ -540,13 +540,13 @@ function read_matfrostarray!(io::BufferedStream, ::Type{Array{T,N}}) where {N, T
 end
 
 function read_matfrostarray!(io::BufferedStream, ::Type{String})
-    read_matfrostarray_header!(io, MATLAB_STRING, Val{0}())
+    read_matfrostarray_header!(io, String)
     read_string!(io)
 end
 
 
 function read_matfrostarray!(io::BufferedStream, ::Type{Array{String,N}}) where {N}
-    dims = read_matfrostarray_header!(io, MATLAB_STRING, Val{N}())
+    dims = read_matfrostarray_header!(io, Array{String,N})
     arr = Array{String, N}(undef, dims)
     for i in eachindex(arr)
         arr[i] = read_string!(io)
@@ -557,7 +557,7 @@ end
 
 @generated function read_matfrostarray!(io::BufferedStream, ::Type{Array{Array{T,M}, N}}) where {T,N,M}
     return quote
-        dims = read_matfrostarray_header!(io, CELL, Val{N}())
+        dims = read_matfrostarray_header!(io, Array{Array{T,M}, N})
         arr = Array{Array{T,M}, N}(undef, dims)
         for i in eachindex(arr)
             try
@@ -579,7 +579,7 @@ Read a tuple object.
     
     return quote
 
-        dim = read_matfrostarray_header!(io, CELL, Val{1}())
+        dim = read_matfrostarray_header!(io, T)
 
         if (dim[1] != length(fieldnames(T)))
             discard_matfrostarray!(io, dim[1])
@@ -676,7 +676,7 @@ Read scalar struct object from MATFrostArray
     end
 
     return quote
-        read_matfrostarray_header!(io, STRUCT, Val{0}())
+        read_matfrostarray_header!(io, T)
         fieldnames_mat = read_matrfrostarray_struct_header!(io, fieldnames(T), 1)
 
         read_matfrostarray_struct_object!(io, fieldnames_mat, T)
@@ -698,7 +698,7 @@ Read array of struct objects from MATFrostArray
 
 
     return quote
-        dims = read_matfrostarray_header!(io, STRUCT, Val{N}())
+        dims = read_matfrostarray_header!(io, Array{T,N})
 
         nel = prod(dims; init=1)
 

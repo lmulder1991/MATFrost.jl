@@ -48,7 +48,7 @@ nest1(3,1).a = tops1;
 nest1(3,1).b = tops2;
 nest1(3,1).c  = c;
 nest1(3,1).d = namedtupe;
-nest1(3,1).f64v = reshape(int32([3,4,5,6]),4,1);
+nest1(3,1).f64v = reshape(([3,4,5,6]),4,1,1,1);
 
 
 
