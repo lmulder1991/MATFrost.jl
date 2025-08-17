@@ -480,7 +480,7 @@ end
                     $(Symbol(:_lfv_, fieldnames(T)[i])) :: Union{Nothing, $(fieldtypes(T)[i])} = nothing
                 end for i in eachindex(fieldnames(T)))...)
 
-                # Parse each field value. Parsing must be done in the order of MATFrostSequence
+                # Parse each field value. Parsing must be done in the order of MATFrostArray
                 for fn_i in 1:length(fieldnames_mat)
                     fieldname = fieldnames_mat[fn_i]
                     try 
