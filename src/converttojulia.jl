@@ -412,7 +412,6 @@ end
             throw("Cell does not contain amount of expected values:")
         end
 
-
         fi = 0
         try
             $((quote
@@ -451,13 +450,8 @@ function read_matrfrostarray_struct_header!(io::BufferedStream, expected_fieldna
 end
 
 
-@generated function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T}
-    
-    return quote
-        read_matfrostarray_header!(io, STRUCT, Val{0}())
-        fieldnames_mat = read_matrfrostarray_struct_header!(io, fieldnames(T), 1)
-
-
+@generated function read_matfrostarray_struct_object!(io::BufferedStream, fieldnames_mat::Vector{Symbol}, ::Type{T}) where{T}
+    quote
         # Create local variables with type annotation, {Nothing, FieldType}
         $((quote
             $(Symbol(:_lfv_, fieldnames(T)[i])) :: Union{Nothing, $(fieldtypes(T)[i])} = nothing
@@ -468,7 +462,7 @@ end
             fieldname = fieldnames_mat[fn_i]
             try 
                 $((quote
-                     if (fieldname == fieldnames(T)[$(i)])
+                    if (fieldname == fieldnames(T)[$(i)])
                         $(Symbol(:_lfv_, fieldnames(T)[i])) = read_matfrostarray!(io, $(fieldtypes(T)[i]))
                     end
                 end for i in eachindex(fieldnames(T)))...)
@@ -485,7 +479,17 @@ end
 
         # Construct new struct
         T($((Symbol(:_lfva_, fieldnames(T)[i]) for i in eachindex(fieldnames(T)))...))
+    end
+end
 
+
+@generated function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T}
+    
+    return quote
+        read_matfrostarray_header!(io, STRUCT, Val{0}())
+        fieldnames_mat = read_matrfrostarray_struct_header!(io, fieldnames(T), 1)
+
+        read_matfrostarray_struct_object!(io, fieldnames_mat, T)
 
     end
 
@@ -501,41 +505,12 @@ end
         arr = Array{T,N}(undef, dims)
         
         for eli in eachindex(arr)
-
             try
-                # Create local variables with type annotation, {Nothing, FieldType}
-                $((quote
-                    $(Symbol(:_lfv_, fieldnames(T)[i])) :: Union{Nothing, $(fieldtypes(T)[i])} = nothing
-                end for i in eachindex(fieldnames(T)))...)
-
-                # Parse each field value. Parsing must be done in the order of MATFrostArray
-                for fn_i in 1:length(fieldnames_mat)
-                    fieldname = fieldnames_mat[fn_i]
-                    try 
-                        $((quote
-                            if (fieldname == fieldnames(T)[$(i)])
-                                $(Symbol(:_lfv_, fieldnames(T)[i])) = read_matfrostarray!(io, $(fieldtypes(T)[i]))
-                            end
-                        end for i in eachindex(fieldnames(T)))...)
-                    catch e
-                        clear_matfrostarray_object!(io, length(fieldnames_mat) - fn_i)
-                        throw(e)
-                    end
-                end
-
-                # Force {Nothing, FieldType} to FieldType
-                $((quote
-                    $(Symbol(:_lfva_, fieldnames(T)[i])) :: $(fieldtypes(T)[i]) = $(Symbol(:_lfv_, fieldnames(T)[i]))
-                end for i in eachindex(fieldnames(T)))...)
-
-                # Construct new struct
-                arr[eli] = T($((Symbol(:_lfva_, fieldnames(T)[i]) for i in eachindex(fieldnames(T)))...))
-
+                arr[eli] = read_matfrostarray_struct_object!(io, fieldnames_mat, T)
             catch e
                 clear_matfrostarray_object!(io, (prod(dims)-eli)*length(fieldnames_mat))
                 throw(e)
             end
-
         end
         arr
     end
