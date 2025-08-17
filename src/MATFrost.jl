@@ -21,7 +21,7 @@ end
 
 include("stream.jl")
 
-include("converttojulia.jl")
+include("read.jl")
 include("converttomatlab.jl")
 include("juliacall.jl")
 include("install.jl")
@@ -67,7 +67,7 @@ function serve(h_stdin_num, h_stdout_num)
         try 
             
         # arr = _ConvertToJulia.read_matlab!(in_buf, Vector{Int32})
-            arr = _ConvertToJulia.read_matfrostarray!(in_buf, Vector{StructTestNest})
+            arr = _Read.read_matfrostarray!(in_buf, Vector{StructTestNest})
 
             _ConvertToMATLAB.write_matlab!(out_buf, arr)
         catch e
