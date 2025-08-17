@@ -401,23 +401,62 @@ function read_matfrostarray!(io::BufferedStream, ::Type{Array{String,N}}) where 
 end
 
 
+@generated function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T <: Tuple}
+    
+    return quote
+
+        dim = read_matfrostarray_header!(io, CELL, Val{1}())
+
+        if (dim[1] != length(fieldnames(T)))
+            clear_matfrostarray_object!(io, dim[1])
+            throw("Cell does not contain amount of expected values:")
+        end
+
+
+        fi = 0
+        try
+            $((quote
+                fi = $(i)
+                $(Symbol(:_v, i)) = read_matfrostarray!(io, $(fieldtypes(T)[i]))
+            end for i in eachindex(fieldnames(T)))...)
+            
+            return T(($((Symbol(:_v, i) for i in eachindex(fieldnames(T)))...),))
+        catch e
+            clear_matfrostarray_object!(io, length(fieldnames(T)) - fi)
+            throw(e)
+        end
+
+
+    end
+
+end
+
+function read_matrfrostarray_struct_header!(io::BufferedStream, expected_fieldnames::NTuple{N, Symbol}, nel::Int64) where {N}
+
+    numfields_mat = read!(io, Int64)
+    fieldnames_mat = Vector{Symbol}(undef, numfields_mat)
+    fieldname_in_type = Vector{Bool}(undef, numfields_mat)
+    for i in eachindex(fieldnames_mat)
+        fieldnames_mat[i] = Symbol(read_string!(io))
+        fieldname_in_type[i] = fieldnames_mat[i] in expected_fieldnames
+    end
+    
+    if (numfields_mat != N || !all(fieldname_in_type))
+        clear_matfrostarray_object!(io, nel*numfields_mat)
+        throw("Fieldnames do not match: \nExpected: " * string(expected_fieldnames) *
+            "\nRecieved: " * string(fieldnames_mat))
+    end
+
+    return fieldnames_mat
+end
+
 
 @generated function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T}
     
     return quote
         read_matfrostarray_header!(io, STRUCT, Val{0}())
-        numfields_mat = read!(io, Int64)
-        fieldnames_mat = Vector{Symbol}(undef, numfields_mat)
-        fieldname_in_type = Vector{Bool}(undef, numfields_mat)
-        for i in eachindex(fieldnames_mat)
-            fieldnames_mat[i] = Symbol(read_string!(io))
-            fieldname_in_type[i] = fieldnames_mat[i] in fieldnames(T)
-        end
-        
-        if (numfields_mat != length(fieldnames(T)) || !all(fieldname_in_type))
-            clear_matfrostarray_object!(io, numfields_mat)
-            throw("Fieldnames do not match")
-        end
+        fieldnames_mat = read_matrfrostarray_struct_header!(io, fieldnames(T), 1)
+
 
         # Create local variables with type annotation, {Nothing, FieldType}
         $((quote
@@ -434,7 +473,7 @@ end
                     end
                 end for i in eachindex(fieldnames(T)))...)
             catch e
-                clear_matfrostarray_object!(io, numfields_mat - fn_i)
+                clear_matfrostarray_object!(io, length(fieldnames(T)) - fn_i)
                 throw(e)
             end
         end
@@ -457,18 +496,7 @@ end
     
     return quote
         dims = read_matfrostarray_header!(io, STRUCT, Val{N}())
-        numfields_mat = read!(io, Int64)
-        fieldnames_mat = Vector{Symbol}(undef, numfields_mat)
-        fieldname_in_type = Vector{Bool}(undef, numfields_mat)
-        for i in eachindex(fieldnames_mat)
-            fieldnames_mat[i] = Symbol(read_string!(io))
-            fieldname_in_type[i] = fieldnames_mat[i] in fieldnames(T)
-        end
-        
-        if (numfields_mat != length(fieldnames(T)) || !all(fieldname_in_type))
-            clear_matfrostarray_object!(io, numfields_mat*prod(dims))
-            throw("Fieldnames do not match")
-        end
+        fieldnames_mat = read_matrfrostarray_struct_header!(io, fieldnames(T), prod(dims))
 
         arr = Array{T,N}(undef, dims)
         
@@ -490,7 +518,7 @@ end
                             end
                         end for i in eachindex(fieldnames(T)))...)
                     catch e
-                        clear_matfrostarray_object!(io, numfields_mat - fn_i)
+                        clear_matfrostarray_object!(io, length(fieldnames_mat) - fn_i)
                         throw(e)
                     end
                 end
@@ -504,7 +532,7 @@ end
                 arr[eli] = T($((Symbol(:_lfva_, fieldnames(T)[i]) for i in eachindex(fieldnames(T)))...))
 
             catch e
-                clear_matfrostarray_object!(io, (prod(dims)-eli)*numfields_mat)
+                clear_matfrostarray_object!(io, (prod(dims)-eli)*length(fieldnames_mat))
                 throw(e)
             end
 
