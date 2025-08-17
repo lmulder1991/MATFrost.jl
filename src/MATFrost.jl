@@ -40,6 +40,7 @@ struct StructTestNest
     a::StructTest
     b::StructTest
     c::Tuple{Float64,Int64}
+    d::@NamedTuple{e::Int32, f::Float32}
 end
 function serve(h_stdin_num, h_stdout_num)
     Nel = 1000000 + 2*3 + 1

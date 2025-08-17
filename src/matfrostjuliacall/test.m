@@ -27,18 +27,27 @@ nest1(3,1).c  = c;
 % s= mh.feval("matfrostjuliacall", ...
 %     nest1);
 
+namedtupe = struct;
+namedtupe.e = int32(353);
+namedtupe.f = single(4353.0);
+
 nest1 = struct;
 nest1.a = tops1;
 nest1.b = tops2;
 nest1.c  = c;
+nest1.d = namedtupe;
 
 nest1(2,1).a = tops1;
 nest1(2,1).b = tops2;
 nest1(2,1).c  = c;
+nest1(2,1).d = namedtupe;
 
 nest1(3,1).a = tops1;
 nest1(3,1).b = tops2;
 nest1(3,1).c  = c;
+nest1(3,1).d = namedtupe;
+
+
 
 s2= mh.feval("matfrostjuliacall", ...
     nest1)

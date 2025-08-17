@@ -3,6 +3,7 @@ module _Read
 
 import ..MATFrost._Stream: read!, write!, flush!, BufferedStream, read_and_clear!
 
+using ..MATFrost: _MATFrostException as MATFrostException
 # using ..MATFrost: _MATFrostArray as MATFrostArray
 # using ..MATFrost: _MATFrostException as MATFrostException
 # using ..MATFrost._Stream: BufferedStream, 
@@ -309,6 +310,7 @@ function read_matfrostarray_header!(io::BufferedStream, expected_type::Int32, ::
     type = read!(io, Int32)
 
     incompatible_datatypes = type != expected_type
+    incompatible_array_dimension = false
 
     ndims_mat = read!(io, Int64)
 
@@ -320,9 +322,8 @@ function read_matfrostarray_header!(io::BufferedStream, expected_type::Int32, ::
         end
     end
 
-    nel = prod(dims; init=1)
-
-    incompatible_array_dimension = false
+    neldims = prod(dims; init=1)
+    nel = neldims
 
     for _ in (N+1):ndims_mat
         dim = read!(io, Int64)
@@ -330,7 +331,7 @@ function read_matfrostarray_header!(io::BufferedStream, expected_type::Int32, ::
     end
 
     if (N > 0) # Array behavior
-        if (prod(dims; init=1) != nel)
+        if (neldims != nel)
             incompatible_array_dimension = true
         elseif (nel == 0) 
             # Special behavior if nel==0. For this case allow any datatype input. 
