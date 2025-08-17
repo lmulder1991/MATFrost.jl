@@ -12,6 +12,15 @@ using ..MATFrost: _MATFrostException as MATFrostException
 #     T(undef, ntuple(i -> ifelse(i <= nel, unsafe_load(dims, i), Csize_t(1)), ndims(T)))
 # end
 
+struct MATFrostArrayHeader{N}
+    type  :: Int32
+    ndims :: Int64
+    nel   :: Int64            # Total number of elements in array.
+    dims1 :: NTuple{N, Int64} # The first N-dimensions of array
+    dims2 :: NTuple{4, Int64} # Dimensions (N+1):(N+4) of array. 
+end
+
+
 
 const LOGICAL = Int32(0)
 
@@ -54,58 +63,6 @@ const SPARSE_LOGICAL = Int32(29)
 const SPARSE_DOUBLE = Int32(30)
 const SPARSE_COMPLEX_DOUBLE = Int32(31)
 
-
-
-# abstract type MATLABType end
-
-# struct MATLABLogical <: MATLABType end
-# struct MATLABString  <: MATLABType end
-# struct MATLABDouble  <: MATLABType end
-# struct MATLABSingle  <: MATLABType end
-
-# struct MATFrostArrayTyped{T <: MATLABType}
-#     mfa::MATFrostArray
-# end
-
-
-
-
-# type_compatible(::Type{Bool}, mfa::MATFrostArray) = mfa.type == LOGICAL
-# type_compatible(::Type{String}, mfa::MATFrostArray) = mfa.type == MATLAB_STRING
-# type_compatible(::Type{T}, mfa::MATFrostArray) where {T<:Array{String}} = mfa.type == MATLAB_STRING
-
-# type_compatible(::Type{T}, mfa::MATFrostArray) where {T<:Tuple} = mfa.type == CELL
-# type_compatible(::Type{T}, mfa::MATFrostArray) where {T<:Array{<:Union{Array, Tuple}}} = mfa.type == CELL
-
-# type_compatible(::Type{T}, mfa::MATFrostArray) where {T<:NamedTuple} = mfa.type == STRUCT
-# type_compatible(::Type{T}, mfa::MATFrostArray) where {T} = mfa.type == STRUCT
-# type_compatible(::Type{T}, mfa::MATFrostArray) where {T<:Array} = mfa.type == STRUCT
-
-# type_compatible(::Type{Array{T, N}}, mfa::MATFrostArray) where {T<:Number, N} = type_compatible(T, mfa)
-
-# type_compatible(::Type{Float64}, mfa::MATFrostArray) = mfa.type == DOUBLE
-# type_compatible(::Type{Float32}, mfa::MATFrostArray) = mfa.type == SINGLE
-
-# type_compatible(::Type{Int8}, mfa::MATFrostArray)   = mfa.type == INT8
-# type_compatible(::Type{UInt8}, mfa::MATFrostArray)  = mfa.type == UINT8
-# type_compatible(::Type{Int16}, mfa::MATFrostArray)  = mfa.type == INT16
-# type_compatible(::Type{UInt16}, mfa::MATFrostArray) = mfa.type == UINT16
-# type_compatible(::Type{Int32}, mfa::MATFrostArray)  = mfa.type == INT32
-# type_compatible(::Type{UInt32}, mfa::MATFrostArray) = mfa.type == UINT32
-# type_compatible(::Type{Int64}, mfa::MATFrostArray)  = mfa.type == INT64
-# type_compatible(::Type{UInt64}, mfa::MATFrostArray) = mfa.type == UINT64
-
-# type_compatible(::Type{Complex{Float64}}, mfa::MATFrostArray) = mfa.type == COMPLEX_DOUBLE
-# type_compatible(::Type{Complex{Float32}}, mfa::MATFrostArray) = mfa.type == COMPLEX_SINGLE
-
-# type_compatible(::Type{Complex{Int8}}, mfa::MATFrostArray)   = mfa.type == COMPLEX_INT8
-# type_compatible(::Type{Complex{UInt8}}, mfa::MATFrostArray)  = mfa.type == COMPLEX_UINT8
-# type_compatible(::Type{Complex{Int16}}, mfa::MATFrostArray)  = mfa.type == COMPLEX_INT16
-# type_compatible(::Type{Complex{UInt16}}, mfa::MATFrostArray) = mfa.type == COMPLEX_UINT16
-# type_compatible(::Type{Complex{Int32}}, mfa::MATFrostArray)  = mfa.type == COMPLEX_INT32
-# type_compatible(::Type{Complex{UInt32}}, mfa::MATFrostArray) = mfa.type == COMPLEX_UINT32
-# type_compatible(::Type{Complex{Int64}}, mfa::MATFrostArray)  = mfa.type == COMPLEX_INT64
-# type_compatible(::Type{Complex{UInt64}}, mfa::MATFrostArray) = mfa.type == COMPLEX_UINT64
 
 
 function array_type_name(type::Int32)
@@ -350,7 +307,7 @@ function read_matfrostarray_header3!(io::BufferedStream, ::Val{N}) :: Tuple{Int3
    
     ndims_mat = read!(io, Int64)
 
-    dims = ntuple(Val{N}()) do i
+    dims1 = ntuple(Val{N}()) do i
         if i <= ndims_mat
             return read!(io, Int64)
         else
@@ -358,7 +315,7 @@ function read_matfrostarray_header3!(io::BufferedStream, ::Val{N}) :: Tuple{Int3
         end
     end
 
-    matdims = ntuple(Val{4}()) do i
+    dims2 = ntuple(Val{4}()) do i
         if (i+N) <= ndims_mat
             return read!(io, Int64)
         else
@@ -366,14 +323,14 @@ function read_matfrostarray_header3!(io::BufferedStream, ::Val{N}) :: Tuple{Int3
         end
     end
     
-    nel = prod(dims; init=1)*prod(matdims)
+    nel = prod(dims1; init=1)*prod(dims2)
 
     for _ in (N+4+1):ndims_mat
         dim = read!(io, Int64)
         nel *= dim
     end
 
-    (type, ndims_mat, nel, dims, matdims)
+    (type, ndims_mat, nel, dims1, dims2)
 end
 
 
