@@ -43,15 +43,23 @@ struct StructTestNest
     d::@NamedTuple{e::Int32, f::Float32}
     f64v::Vector{Float64}
 end
+
 function serve(h_stdin_num, h_stdout_num)
+    h_stdin = reinterpret(Ptr{Cvoid}, h_stdin_num)
+    h_stdout = reinterpret(Ptr{Cvoid}, h_stdout_num)
+
+    serve(h_stdin, h_stdout)
+end
+
+function serve(h_stdin::Ptr{Cvoid}, h_stdout::Ptr{Cvoid})
     Nel = 1000000 + 2*3 + 1
     buf = Vector{Int32}(undef, Nel)
 #    el = 0
     # h_stdin = @ccall "kernel32".GetStdHandle(Int32(-10)::Cint)::Ptr{Cvoid}
     # h_stdout = @ccall "kernel32".GetStdHandle(Int32(-11)::Cint)::Ptr{Cvoid}
    
-    h_stdin = reinterpret(Ptr{Cvoid}, h_stdin_num)
-    h_stdout = reinterpret(Ptr{Cvoid}, h_stdout_num)
+    # h_stdin = reinterpret(Ptr{Cvoid}, h_stdin_num)
+    # h_stdout = reinterpret(Ptr{Cvoid}, h_stdout_num)
 
     open(raw"C:\Users\jbelier\Documents\matfrosthandles.txt","w") do io
         println(io,h_stdin)

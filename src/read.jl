@@ -339,34 +339,6 @@ function read_matfrostarray_header3!(io::BufferedStream, ::Val{N}) :: MATFrostAr
 end
 
 
-# function read_matfrostarray_header4!(io::BufferedStream, ::Type{Array{T,N}}) where {T,N}
-
-#     (type, nel, dims) = read_matfrostarray_header3!(io, Val{N}())
-
-
-# end
-
-
-
-# function incompatible_array_dimensions_exception(::Type{T}, mfa::MATFrostArray) where {T}
-#     actual_shape = join((string(unsafe_load(mfa.dims, i)) for i in 1:mfa.ndims), ", ")
-    
-#     actual_numdims = maximum(ifelse(unsafe_load(mfa.dims, i) != 1, i, 0) for i in 1:mfa.ndims)
-
-#     expected_array_dimensions = ifelse(ndims(T) == 1,
-#         "1 (column-vector); dimensions=(:, 1)", 
-#         "$(ndims(T)); dimensions=($( join((":" for _ in 1:ndims(T)), ", ") ))")
-
-#     MATFrostException(
-#         "matfrostjulia:conversion:incompatibleArrayDimensions",
-# """
-# Converting to: $(string(T)) 
-
-# Array dimensions incompatible:
-#     Actual array dimensions:   numdims=$(string(actual_numdims)); dimensions=($(actual_shape))
-#     Expected array dimensions: numdims=$(expected_array_dimensions)
-# """)
-# end
 function incompatible_datatypes_exception(::Type{T}, type::Int32) where {T}
     MATFrostException(
         "matfrostjulia:conversion:incompatibleDatatypes",
@@ -412,13 +384,55 @@ Not scalar value:
 end
 
 
+
+function validate_matfrostarray_type_and_size(io::BufferedStream, ::Type{T}, header::MATFrostArrayHeader) where {T}
+    expected_type = expected_matlab_type(T)
+
+    if (header.nel != 1)
+        discard_matfrostarray_body!(io, header)
+        throw(not_scalar_value_exception(T, header.nel, header.ndims, header.dims2))
+    elseif (header.type != expected_type)
+        discard_matfrostarray_body!(io, header)
+        throw(incompatible_datatypes_exception(T, header.type))
+    end
+
+    nothing
+end
+
+function validate_matfrostarray_type_and_size(io::BufferedStream, ::Type{T}, header::MATFrostArrayHeader) where {T<:Array}
+    expected_type = expected_matlab_type(T)
+
+    if (prod(header.dims1; init=1) != header.nel)
+        discard_matfrostarray_body!(io, header)
+        throw(incompatible_array_dimensions_exception(T, header.nel, header.ndims, (header.dims1..., header.dims2...)))
+    elseif ((header.nel != 0) & (header.type != expected_type))
+        discard_matfrostarray_body!(io, header)
+        throw(incompatible_datatypes_exception(T, header.type))
+    end
+
+    nothing
+end
+
+function validate_matfrostarray_type_and_size(io::BufferedStream, ::Type{T}, header::MATFrostArrayHeader) where {T<:Tuple}
+    expected_type = expected_matlab_type(T)
+    
+    if ((header.nel != length(fieldnames(T))) || (header.dims1[1] != header.nel))
+        discard_matfrostarray_body!(io, header)
+        throw("Tuple error size does not match")
+    elseif (header.type != expected_type)
+        discard_matfrostarray_body!(io, header)
+        throw(incompatible_datatypes_exception(T, header.type))
+    end
+
+    nothing
+end
+
+
 function read_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: Tuple{} where {T}
 
     header = read_matfrostarray_header3!(io, Val{0}())
 
-
     expected_type = expected_matlab_type(T)
-
 
     if (header.nel != 1)
         discard_matfrostarray_body!(io, header)
@@ -467,6 +481,8 @@ function read_matfrostarray_header!(io::BufferedStream, ::Type{Array{T,N}}) :: N
     return header.dims1
 end
 
+
+
 function read_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: NTuple{1, Int64} where {T <: Tuple}
 
     header = read_matfrostarray_header3!(io, Val{1}())
@@ -489,25 +505,25 @@ end
 
 
 
-function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T <: Number}
+@noinline function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T <: Number}
     read_matfrostarray_header!(io, T)
     read!(io, T)
 end
 
-function read_matfrostarray!(io::BufferedStream, ::Type{Array{T,N}}) where {N, T <: Number}
+@noinline function read_matfrostarray!(io::BufferedStream, ::Type{Array{T,N}}) where {N, T <: Number}
     dims = read_matfrostarray_header!(io, Array{T,N})
     arr = Array{T,N}(undef, dims)
     read!(io, arr)
     arr
 end
 
-function read_matfrostarray!(io::BufferedStream, ::Type{String})
+@noinline function read_matfrostarray!(io::BufferedStream, ::Type{String})
     read_matfrostarray_header!(io, String)
     read_string!(io)
 end
 
 
-function read_matfrostarray!(io::BufferedStream, ::Type{Array{String,N}}) where {N}
+@noinline function read_matfrostarray!(io::BufferedStream, ::Type{Array{String,N}}) where {N}
     dims = read_matfrostarray_header!(io, Array{String,N})
     arr = Array{String, N}(undef, dims)
     for i in eachindex(arr)
@@ -523,7 +539,7 @@ end
         arr = Array{Array{T,M}, N}(undef, dims)
         for i in eachindex(arr)
             try
-                arr[i] = read_matfrostarray!(io, Array{T,M})
+                arr[i] = @noinline read_matfrostarray!(io, Array{T,M})
             catch e
                 discard_matfrostarray!(io, prod(dims; init=1) - i)
                 throw(e)
@@ -550,12 +566,11 @@ Read a tuple object.
 
         fi = 0
         try
-            $((quote
-                fi = $(i)
-                $(Symbol(:_v, i)) = read_matfrostarray!(io, $(fieldtypes(T)[i]))
-            end for i in eachindex(fieldnames(T)))...)
+            tup = ($((quote
+                (fi = $(i); @noinline read_matfrostarray!(io, $(fieldtypes(T)[i])))
+            end for i in eachindex(fieldnames(T)))...),)
             
-            return T(($((Symbol(:_v, i) for i in eachindex(fieldnames(T)))...),))
+            return T(tup)
         catch e
             discard_matfrostarray!(io, length(fieldnames(T)) - fi)
             throw(e)
@@ -601,7 +616,7 @@ Read a scalar struct object.
             try 
                 $((quote
                     if (fieldname == fieldnames(T)[$(i)])
-                        $(Symbol(:_lfv_, fieldnames(T)[i])) = read_matfrostarray!(io, $(fieldtypes(T)[i]))
+                        $(Symbol(:_lfv_, fieldnames(T)[i])) = @noinline read_matfrostarray!(io, $(fieldtypes(T)[i]))
                     end
                 end for i in eachindex(fieldnames(T)))...)
             catch e
