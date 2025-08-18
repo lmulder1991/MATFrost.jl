@@ -299,6 +299,11 @@ function discard_matfrostarray_body!(io::BufferedStream, type::Int32, nel::Int64
             end
         end
     end
+    nothing
+end
+
+function discard_matfrostarray_body!(io::BufferedStream, header::MATFrostArrayHeader) 
+    discard_matfrostarray_body!(io, header.type, header.nel)
 end
 
 
@@ -416,10 +421,10 @@ function read_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: Tuple{} wh
 
 
     if (header.nel != 1)
-        discard_matfrostarray_body!(io, header.type, header.nel)
+        discard_matfrostarray_body!(io, header)
         throw(not_scalar_value_exception(T, header.nel, header.ndims, header.dims2))
     elseif (header.type != expected_type)
-        discard_matfrostarray_body!(io, header.type, header.nel)
+        discard_matfrostarray_body!(io, header)
         throw(incompatible_datatypes_exception(T, header.type))
     end
 
@@ -440,7 +445,7 @@ function read_matfrostarray_header!(io::BufferedStream, ::Type{Array{T,N}}) :: N
     # incompatible_array_dimension = false
 
     if (prod(header.dims1; init=1) != header.nel)
-        discard_matfrostarray_body!(io, header.type, header.nel)
+        discard_matfrostarray_body!(io, header)
         throw(incompatible_array_dimensions_exception(Array{T,N}, header.nel, header.ndims, (header.dims1..., header.dims2...)))
     elseif (header.nel == 0) 
         # Special behavior if nel==0. For this case allow any datatype input. 
@@ -454,7 +459,7 @@ function read_matfrostarray_header!(io::BufferedStream, ::Type{Array{T,N}}) :: N
             end
         end
     elseif (header.type != expected_type)
-        discard_matfrostarray_body!(io, header.type, header.nel)
+        discard_matfrostarray_body!(io, header)
         throw(incompatible_datatypes_exception(Array{T,N}, header.type))
     end
 
@@ -471,10 +476,10 @@ function read_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: NTuple{1, 
 
 
     if ((header.nel != length(fieldnames(T))) || (header.dims1[1] != header.nel))
-        discard_matfrostarray_body!(io, header.type, header.nel)
+        discard_matfrostarray_body!(io, header)
         throw("Tuple error size does not match")
     elseif (header.type != expected_type)
-        discard_matfrostarray_body!(io, header.type, header.nel)
+        discard_matfrostarray_body!(io, header)
         throw(incompatible_datatypes_exception(T, header.type))
     end
 
