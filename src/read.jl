@@ -302,13 +302,13 @@ function discard_matfrostarray_body!(io::BufferedStream, type::Int32, nel::Int64
 end
 
 
-function read_matfrostarray_header3!(io::BufferedStream, ::Val{N}) :: Tuple{Int32, Int64, Int64, NTuple{N, Int64}, NTuple{4,Int64}} where {N}
+function read_matfrostarray_header3!(io::BufferedStream, ::Val{N}) :: MATFrostArrayHeader{N} where {N}
     type = read!(io, Int32)
    
-    ndims_mat = read!(io, Int64)
+    ndims = read!(io, Int64)
 
     dims1 = ntuple(Val{N}()) do i
-        if i <= ndims_mat
+        if i <= ndims
             return read!(io, Int64)
         else
             return 1
@@ -316,7 +316,7 @@ function read_matfrostarray_header3!(io::BufferedStream, ::Val{N}) :: Tuple{Int3
     end
 
     dims2 = ntuple(Val{4}()) do i
-        if (i+N) <= ndims_mat
+        if (i+N) <= ndims
             return read!(io, Int64)
         else
             return 1
@@ -325,12 +325,12 @@ function read_matfrostarray_header3!(io::BufferedStream, ::Val{N}) :: Tuple{Int3
     
     nel = prod(dims1; init=1)*prod(dims2)
 
-    for _ in (N+4+1):ndims_mat
+    for _ in (N+4+1):ndims
         dim = read!(io, Int64)
         nel *= dim
     end
 
-    (type, ndims_mat, nel, dims1, dims2)
+    MATFrostArrayHeader{N}(type, ndims, nel, dims1, dims2)
 end
 
 
@@ -409,18 +409,18 @@ end
 
 function read_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: Tuple{} where {T}
 
-    (type, ndims_mat, nel, dims1, dims2) = read_matfrostarray_header3!(io, Val{0}())
+    header = read_matfrostarray_header3!(io, Val{0}())
 
 
     expected_type = expected_matlab_type(T)
 
 
-    if (nel != 1)
-        discard_matfrostarray_body!(io, type, nel)
-        throw(not_scalar_value_exception(T, nel, ndims_mat, dims2))
-    elseif (type != expected_type)
-        discard_matfrostarray_body!(io, type, nel)
-        throw(incompatible_datatypes_exception(T, type))
+    if (header.nel != 1)
+        discard_matfrostarray_body!(io, header.type, header.nel)
+        throw(not_scalar_value_exception(T, header.nel, header.ndims, header.dims2))
+    elseif (header.type != expected_type)
+        discard_matfrostarray_body!(io, header.type, header.nel)
+        throw(incompatible_datatypes_exception(T, header.type))
     end
 
 
@@ -431,7 +431,7 @@ end
 # end
 function read_matfrostarray_header!(io::BufferedStream, ::Type{Array{T,N}}) :: NTuple{N, Int64} where {T,N}
 
-    (type, ndims_mat, nel, dims1, dims2) = read_matfrostarray_header3!(io, Val{N}())
+    header = read_matfrostarray_header3!(io, Val{N}())
 
 
     expected_type = expected_matlab_type(Array{T,N})
@@ -439,47 +439,47 @@ function read_matfrostarray_header!(io::BufferedStream, ::Type{Array{T,N}}) :: N
     # incompatible_datatypes = type != expected_type
     # incompatible_array_dimension = false
 
-    if (prod(dims1; init=1) != nel)
-        discard_matfrostarray_body!(io, type, nel)
-        throw(incompatible_array_dimensions_exception(Array{T,N}, nel, ndims_mat, (dims1..., dims2...)))
-    elseif (nel == 0) 
+    if (prod(header.dims1; init=1) != header.nel)
+        discard_matfrostarray_body!(io, header.type, header.nel)
+        throw(incompatible_array_dimensions_exception(Array{T,N}, header.nel, header.ndims, (header.dims1..., header.dims2...)))
+    elseif (header.nel == 0) 
         # Special behavior if nel==0. For this case allow any datatype input. 
         # MATLAB does not act strict on the datatype of empty values.
 
-        if type == STRUCT
+        if header.type == STRUCT
             nfields = read!(io, Int64)
             for _ in 1:nfields
                 nb = read!(io, Int64)
                 discard!(io, nb)
             end
         end
-    elseif (type != expected_type)
-        discard_matfrostarray_body!(io, type, nel)
-        throw(incompatible_datatypes_exception(Array{T,N}, type))
+    elseif (header.type != expected_type)
+        discard_matfrostarray_body!(io, header.type, header.nel)
+        throw(incompatible_datatypes_exception(Array{T,N}, header.type))
     end
 
 
-    return dims1
+    return header.dims1
 end
 
 function read_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: NTuple{1, Int64} where {T <: Tuple}
 
-    (type, ndims_mat, nel, dims1, dims2) = read_matfrostarray_header3!(io, Val{1}())
+    header = read_matfrostarray_header3!(io, Val{1}())
 
 
     expected_type = expected_matlab_type(T)
 
 
-    if (dims1[1] != length(fieldnames(T)))
-        discard_matfrostarray_body!(io, type, nel)
+    if ((header.nel != length(fieldnames(T))) || (header.dims1[1] != header.nel))
+        discard_matfrostarray_body!(io, header.type, header.nel)
         throw("Tuple error size does not match")
-    elseif (type != expected_type)
-        discard_matfrostarray_body!(io, type, nel)
-        throw(incompatible_datatypes_exception(T, type))
+    elseif (header.type != expected_type)
+        discard_matfrostarray_body!(io, header.type, header.nel)
+        throw(incompatible_datatypes_exception(T, header.type))
     end
 
 
-    return dims1
+    return header.dims1
 end
 
 
