@@ -12,12 +12,9 @@ using ..MATFrost: _MATFrostException as MATFrostException
 #     T(undef, ntuple(i -> ifelse(i <= nel, unsafe_load(dims, i), Csize_t(1)), ndims(T)))
 # end
 
-struct MATFrostArrayHeader{N}
-    type  :: Int32
-    ndims :: Int64
-    nel   :: Int64            # Total number of elements in array.
-    dims1 :: NTuple{N, Int64} # The first N-dimensions of array
-    dims2 :: NTuple{4, Int64} # Dimensions (N+1):(N+4) of array. 
+struct MATFrostArrayHeader
+    type :: Int32
+    dims :: Vector{Int64}
 end
 
 
@@ -303,85 +300,228 @@ function discard_matfrostarray_body!(io::BufferedStream, type::Int32, nel::Int64
 end
 
 function discard_matfrostarray_body!(io::BufferedStream, header::MATFrostArrayHeader) 
-    discard_matfrostarray_body!(io, header.type, header.nel)
+    discard_matfrostarray_body!(io, header.type, prod(header.dims; init=1))
 end
 
 
-function read_matfrostarray_header3!(io::BufferedStream, ::Val{N}) :: MATFrostArrayHeader{N} where {N}
+function read_matfrostarray_header3!(io::BufferedStream) :: MATFrostArrayHeader
     type = read!(io, Int32)
    
     ndims = read!(io, Int64)
 
-    dims1 = ntuple(Val{N}()) do i
-        if i <= ndims
-            return read!(io, Int64)
-        else
-            return 1
-        end
-    end
+    dims = Int64[read!(io, Int64) for _ in 1:ndims]
 
-    dims2 = ntuple(Val{4}()) do i
-        if (i+N) <= ndims
-            return read!(io, Int64)
-        else
-            return 1
-        end
-    end
+    MATFrostArrayHeader(type, dims)
     
-    nel = prod(dims1; init=1)*prod(dims2)
+    # dims1 = ntuple(Val{N}()) do i
+    #     if i <= ndims
+    #         return read!(io, Int64)
+    #     else
+    #         return 1
+    #     end
+    # end
 
-    for _ in (N+4+1):ndims
-        dim = read!(io, Int64)
-        nel *= dim
-    end
+    # dims2 = ntuple(Val{4}()) do i
+    #     if (i+N) <= ndims
+    #         return read!(io, Int64)
+    #     else
+    #         return 1
+    #     end
+    # end
+    
+    # nel = prod(dims1; init=1)*prod(dims2)
 
-    MATFrostArrayHeader{N}(type, ndims, nel, dims1, dims2)
+    # for _ in (N+4+1):ndims
+    #     dim = read!(io, Int64)
+    #     nel *= dim
+    # end
+
+    # MATFrostArrayHeader{N}(type, ndims, nel, dims1, dims2)
+end
+
+"""
+Pre-generated typenames used in error messages. As `string` is not type-stable.
+"""
+@generated function _typename(::Type{T}) where T
+    :($(string(T)))
+end
+
+"""
+Pre-generated typenames used in error messages. As `string` is not type-stable.
+"""
+@generated function _fieldtypenames(::Type{T}) where T
+    :(String[$((:(_typename($(ft))) for ft in fieldtypes(T))...)])
 end
 
 
-function incompatible_datatypes_exception(::Type{T}, type::Int32) where {T}
+@noinline function incompatible_datatypes_exception(typename::String, expectedmatlabtypename::String, matlabtype::Int32)
     MATFrostException(
         "matfrostjulia:conversion:incompatibleDatatypes",
 """
-Converting to: $(T) 
+Converting to: $(typename) 
 
 Incompatible datatypes conversion:
-    Actual MATLAB type:   $(array_type_name(type))[]
-    Expected MATLAB type: $(expected_matlab_type_name(T))[]
+    Actual MATLAB type:   $(array_type_name(matlabtype))[]
+    Expected MATLAB type: $(expectedmatlabtypename)[]
 """)
 end
 
+@noinline function incompatible_datatypes_exception(::Type{T}, matlabtype::Int32) where {T}
+    typename = _typename(T)
+    expectedmatlabtypename = expected_matlab_type_name(T)
 
-function incompatible_array_dimensions_exception(::Type{Array{T,N}}, nel::Int64,  ndims_mat::Int64, dimsmat::NTuple{M,Int64}) where {T,N, M}
-    dimsprint = ((string(dimsmat[i]) * ", ") for i in 1:min(M, ndims_mat))
+    incompatible_datatypes_exception(typename, expectedmatlabtypename, matlabtype)
+end
+
+
+
+
+
+
+@noinline function incompatible_array_dimensions_exception(typename::String, expectednumdims::Int64, dims::Vector{Int64})
+    dimsprint = ((string(dim) * ", ") for dim in dims)
 
     MATFrostException(
         "matfrostjulia:conversion:incompatibleArrayDimensions",
 """
-Converting to: $(string(Array{T,N})) 
+Converting to: $(typename) 
 
 Array dimensions incompatible:
-    Actual array numel:        $(nel)
-    Actual array dimensions:   numdims=$(ndims_mat); dimensions=($(dimsprint...))
-    Expected array dimensions: numdims=$(N)
+    Actual array numel:        $(prod(dims; init=1))
+    Actual array dimensions:   numdims=$(length(dims)); dimensions=($(dimsprint...))
+    Expected array dimensions: numdims=$(expectednumdims)
 """)
 end
 
-function not_scalar_value_exception(::Type{T}, nel::Int64, ndims_mat::Int64, dimsmat::NTuple{M,Int64}) where {T, M}
+
+@noinline function incompatible_array_dimensions_exception(::Type{Array{T,N}}, dims::Vector{Int64}) where {T,N}
+    typename = _typename(Array{T,N})
+    incompatible_array_dimensions_exception(typename, N, dims)
+end
+
+
+
+
+
+
+@noinline function not_scalar_value_exception(typename::String, dims::Vector{Int64})
     # actual_shape = join((string(unsafe_load(mfa.dims, i)) for i in 1:mfa.ndims), ", ")
-    dimsprint = ((string(dimsmat[i]) * ", ") for i in 1:min(M, ndims_mat))
+        dimsprint = ((string(dim) * ", ") for dim in dims)
 
     MATFrostException(
         "matfrostjulia:conversion:notScalarValue",
 """
-Converting to: $(T) 
+Converting to: $(typename) 
 
 Not scalar value:
-    Actual array numel:        $(nel)
+    Actual array numel:        $(prod(dims; init=1))
     Actual array dimensions:   ($(dimsprint...)) 
     Expected array dimensions: (1, 1)
 """)
 end
+
+@noinline function not_scalar_value_exception(::Type{T}, dims::Vector{Int64}) where T
+    typename = _typename(T)
+    not_scalar_value_exception(typename, dims)
+end
+
+
+
+@noinline function missing_fields_exception(typename::String, fieldnames::Vector{Symbol}, fieldtypenames::Vector{String}, fieldnames_mat::Vector{Symbol})
+    missingfields  = ("    " * String(fn) * "\n" for fn in fieldnames if !(fn in fieldnames_mat))
+    actualfields   = ("    " * String(fn) * "\n"  for fn in fieldnames_mat)
+    expectedfields = ("    " * String(fn) * "::" * ftn * "\n" for (fn, ftn)  in zip(fieldnames, fieldtypenames))
+
+  MATFrostException(
+        "matfrostjulia:conversion:missingFields",
+"""
+Converting to: $(typename)
+
+Input MATLAB struct value is missing fields.
+    
+Missing fields: 
+$(missingfields...)
+
+Actual fields:
+$(actualfields...)
+
+Expected fields:
+$(expectedfields...)
+"""
+    )
+end
+
+
+@noinline function missing_fields_exception(::Type{T}, fieldnames_mat::Vector{Symbol}) where T
+    typename = _typename(T)
+    _fieldnames = Symbol[fieldnames(T)...]
+    fieldtypenames = _fieldtypenames(T)
+    
+    missing_fields_exception(typename, _fieldnames, fieldtypenames, fieldnames_mat)
+
+end
+
+
+
+
+@noinline function additional_fields_exception(typename::String, fieldnames::Vector{Symbol}, fieldtypenames::Vector{String}, fieldnames_mat::Vector{Symbol})
+    additionalfields = ("    $(fn)\n"  for fn in fieldnames_mat if !(fn in fieldnames))
+    actualfields =     ("    $(fn)\n"  for fn in fieldnames_mat)
+    expectedfields =   ("    $(fn)::$(ftn)\n" for (fn, ftn)  in zip(fieldnames, fieldtypenames))
+
+    MATFrostException(
+        "matfrostjulia:conversion:additionalFields",
+"""
+Converting to: $(typename)
+
+Input MATLAB struct value has additional fields.
+
+Additional fields: 
+$(additionalfields...)
+
+Actual fields:
+$(actualfields...)
+
+Expected fields:
+$(expectedfields...)
+"""
+    )
+end 
+
+@noinline function additional_fields_exception(::Type{T}, fieldnames_mat::Vector{Symbol}) where T
+   typename = _typename(T)
+    _fieldnames = Symbol[fieldnames(T)...]
+    fieldtypenames = _fieldtypenames(T)
+    
+    additional_fields_exception(typename, _fieldnames, fieldtypenames, fieldnames_mat)
+
+end
+
+
+   
+@noinline function incompatible_tuple_shape(typename::String, tuplelength::Int64, header::MATFrostArrayHeader)
+actualshape = 1
+
+    MATFrostException(
+        "matfrostjulia:conversion:incompatibleArrayDimensions",
+"""
+Converting to: $(typename) 
+
+Array dimensions incompatible:
+    Actual array dimensions:   numdims=$(length(header.dims)); dimensions=($(actualshape))
+    Expected array dimensions: numdims=1 (column-vector); dimensions=($(tuplelength), 1)
+""")
+end
+
+function incompatible_struct_exception(::Type{T}, fieldnames_mat) where {T}
+    typename = string(T)
+    fieldnames_jl = collect(string.(fieldnames(T)))
+    fieldtypes_names = collect(string.(fieldtypes(T)))
+
+    
+    missing_fields_exception(typename, fieldnames_jl, fieldtypes_names, fieldnames_mat)
+end
+
 
 
 
@@ -404,7 +544,7 @@ function validate_matfrostarray_type_and_size(io::BufferedStream, ::Type{T}, hea
 
     if (prod(header.dims1; init=1) != header.nel)
         discard_matfrostarray_body!(io, header)
-        throw(incompatible_array_dimensions_exception(T, header.nel, header.ndims, (header.dims1..., header.dims2...)))
+        throw(incompatible_array_dimensions_exception(T, header.dims))
     elseif ((header.nel != 0) & (header.type != expected_type))
         discard_matfrostarray_body!(io, header)
         throw(incompatible_datatypes_exception(T, header.type))
@@ -430,13 +570,13 @@ end
 
 function read_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: Tuple{} where {T}
 
-    header = read_matfrostarray_header3!(io, Val{0}())
+    header = read_matfrostarray_header3!(io)
 
     expected_type = expected_matlab_type(T)
-
-    if (header.nel != 1)
+    nel = prod(header.dims; init=1)
+    if (nel != 1)
         discard_matfrostarray_body!(io, header)
-        throw(not_scalar_value_exception(T, header.nel, header.ndims, header.dims2))
+        throw(not_scalar_value_exception(T, header.dims))
     elseif (header.type != expected_type)
         discard_matfrostarray_body!(io, header)
         throw(incompatible_datatypes_exception(T, header.type))
@@ -450,7 +590,7 @@ end
 # end
 function read_matfrostarray_header!(io::BufferedStream, ::Type{Array{T,N}}) :: NTuple{N, Int64} where {T,N}
 
-    header = read_matfrostarray_header3!(io, Val{N}())
+    header = read_matfrostarray_header3!(io)
 
 
     expected_type = expected_matlab_type(Array{T,N})
@@ -458,10 +598,21 @@ function read_matfrostarray_header!(io::BufferedStream, ::Type{Array{T,N}}) :: N
     # incompatible_datatypes = type != expected_type
     # incompatible_array_dimension = false
 
-    if (prod(header.dims1; init=1) != header.nel)
+
+    jldims = ntuple(Val{N}()) do i
+        if i <= length(header.dims)
+            header.dims[i]
+        else
+            1
+        end
+    end
+
+    nel = prod(header.dims; init=1)
+
+    if (prod(jldims; init=1) != nel)
         discard_matfrostarray_body!(io, header)
-        throw(incompatible_array_dimensions_exception(Array{T,N}, header.nel, header.ndims, (header.dims1..., header.dims2...)))
-    elseif (header.nel == 0) 
+        throw(incompatible_array_dimensions_exception(Array{T,N}, header.dims))
+    elseif (nel == 0) 
         # Special behavior if nel==0. For this case allow any datatype input. 
         # MATLAB does not act strict on the datatype of empty values.
 
@@ -478,20 +629,27 @@ function read_matfrostarray_header!(io::BufferedStream, ::Type{Array{T,N}}) :: N
     end
 
 
-    return header.dims1
+    return jldims
 end
 
 
 
 function read_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: NTuple{1, Int64} where {T <: Tuple}
 
-    header = read_matfrostarray_header3!(io, Val{1}())
+    header = read_matfrostarray_header3!(io)
 
 
     expected_type = expected_matlab_type(T)
 
-
-    if ((header.nel != length(fieldnames(T))) || (header.dims1[1] != header.nel))
+    jldims = (
+        if 1 <= length(header.dims)
+            header.dims[1]
+        else
+            1
+        end
+    )
+    nel = prod(dims; init=1)
+    if ((nel != length(fieldnames(T))) || (jldims[1] != nel))
         discard_matfrostarray_body!(io, header)
         throw("Tuple error size does not match")
     elseif (header.type != expected_type)
@@ -500,7 +658,7 @@ function read_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: NTuple{1, 
     end
 
 
-    return header.dims1
+    return jldims
 end
 
 
@@ -533,13 +691,13 @@ end
 end
 
 
-@generated function read_matfrostarray!(io::BufferedStream, ::Type{Array{Array{T,M}, N}}) where {T,N,M}
+@generated function read_matfrostarray!(io::BufferedStream, ::Type{Array{T, N}}) where {T <: Array, N}
     return quote
-        dims = read_matfrostarray_header!(io, Array{Array{T,M}, N})
-        arr = Array{Array{T,M}, N}(undef, dims)
+        dims = read_matfrostarray_header!(io, Array{T, N})
+        arr = Array{T, N}(undef, dims)
         for i in eachindex(arr)
             try
-                arr[i] = @noinline read_matfrostarray!(io, Array{T,M})
+                arr[i] = @noinline read_matfrostarray!(io, T)
             catch e
                 discard_matfrostarray!(io, prod(dims; init=1) - i)
                 throw(e)
@@ -611,7 +769,7 @@ Read a scalar struct object.
         end for i in eachindex(fieldnames(T)))...)
 
         # Parse each field value. Parsing must be done in the order of MATFrostSequence
-        for fn_i in 1:length(fieldnames_mat)
+        for fn_i in eachindex(fieldnames_mat)
             fieldname = fieldnames_mat[fn_i]
             try 
                 $((quote
@@ -702,318 +860,6 @@ Read array of struct objects from MATFrostArray
 
 end
 
-
-
-
-# function incompatible_datatypes_exception(::Type{T}, mfa::MATFrostArray) where {T}
-#     MATFrostException(
-#         "matfrostjulia:conversion:incompatibleDatatypes",
-#         "Converting to: " * string(T) * "\n\nNo conversion defined:\n    Actual MATLAB type:   " * array_type_name(mfa) * "[]\n    Expected MATLAB type: " * expected_matlab_type(T) * "[]")
-# end
-
-# function is_empty_array(mfa::MATFrostArray)
-#     if mfa.ndims == 0
-#         return true
-#     end
-#     any(unsafe_load(mfa.dims, i) == 0 for i in 1:mfa.ndims)
-# end
-
-# function empty_array(::Type{T}) where {T<:Array}
-#     T(undef, ntuple(_-> 0, Val(ndims(T))))
-# end
-
-# function is_scalar_value(mfa::MATFrostArray)
-#     if mfa.ndims == 0
-#         return false
-#     end
-#     for i in 1:mfa.ndims
-#         if unsafe_load(mfa.dims, i) != 1
-#             return false
-#         end
-#     end
-#     return true
-# end
-
-# function not_scalar_value_exception(::Type{T}, mfa::MATFrostArray) where {T}
-#     actual_shape = join((string(unsafe_load(mfa.dims, i)) for i in 1:mfa.ndims), ", ")
-
-#     MATFrostException(
-#         "matfrostjulia:conversion:notScalarValue",
-# """
-# Converting to: $(T) 
-
-# Not scalar value:
-#     Actual array dimensions:   ($actual_shape) 
-#     Expected array dimensions: (1, 1)
-# """)
-# end
-
-# function array_dimensions_compatible(::Type{T}, mfa::MATFrostArray) where {T}
-#     for i in (ndims(T)+1):mfa.ndims
-#         if unsafe_load(mfa.dims, i) != 1
-#             return false
-#         end
-#     end
-#     return true
-# end
-
-# function incompatible_array_dimensions_exception(::Type{T}, mfa::MATFrostArray) where {T}
-#     actual_shape = join((string(unsafe_load(mfa.dims, i)) for i in 1:mfa.ndims), ", ")
-    
-#     actual_numdims = maximum(ifelse(unsafe_load(mfa.dims, i) != 1, i, 0) for i in 1:mfa.ndims)
-
-#     expected_array_dimensions = ifelse(ndims(T) == 1,
-#         "1 (column-vector); dimensions=(:, 1)", 
-#         "$(ndims(T)); dimensions=($( join((":" for _ in 1:ndims(T)), ", ") ))")
-
-#     MATFrostException(
-#         "matfrostjulia:conversion:incompatibleArrayDimensions",
-# """
-# Converting to: $(string(T)) 
-
-# Array dimensions incompatible:
-#     Actual array dimensions:   numdims=$(string(actual_numdims)); dimensions=($(actual_shape))
-#     Expected array dimensions: numdims=$(expected_array_dimensions)
-# """)
-# end
-
-# function read!(::Type{T}, mfa::MATFrostArray) where {T<:Number}
-#     if !is_scalar_value(mfa)
-#         throw(not_scalar_value_exception(T, mfa))
-#     end
-#     if !type_compatible(T, mfa)
-#         throw(incompatible_datatypes_exception(T, mfa))
-#     end
-#     unsafe_load(reinterpret(Ptr{T}, mfa.data))
-# end
-
-# function convert_to_julia(::Type{T}, mfa::MATFrostArray) where {T<:Number}
-#     if !is_scalar_value(mfa)
-#         throw(not_scalar_value_exception(T, mfa))
-#     end
-#     if !type_compatible(T, mfa)
-#         throw(incompatible_datatypes_exception(T, mfa))
-#     end
-#     unsafe_load(reinterpret(Ptr{T}, mfa.data))
-# end
-
-# function convert_to_julia(::Type{T}, mfa::MATFrostArray) where {T<:Array{<:Number}}
-#     if is_empty_array(mfa)
-#         return empty_array(T)
-#     end
-#     if !array_dimensions_compatible(T, mfa)
-#         throw(incompatible_array_dimensions_exception(T, mfa))
-#     end
-#     if !type_compatible(T, mfa)
-#         throw(incompatible_datatypes_exception(T, mfa))
-#     end
-#     ptr = reinterpret(Ptr{eltype(T)}, mfa.data)
-#     arr = new_array(T, mfa.dims, mfa.ndims)
-#     unsafe_copyto!(pointer(arr), ptr, length(arr))
-#     arr  
-# end
-
-
-
-
-# function convert_to_julia(::Type{String}, mfa::MATFrostArray)
-#     if !is_scalar_value(mfa)
-#         throw(not_scalar_value_exception(String, mfa))
-#     end
-#     if !type_compatible(String, mfa)
-#         throw(incompatible_datatypes_exception(String, mfa))
-#     end
-#     unsafe_string(unsafe_load(reinterpret(Ptr{Cstring}, mfa.data)))
-# end
-
-# function convert_to_julia(::Type{T}, mfa::MATFrostArray) where {T <: Array{String}} 
-#     if is_empty_array(mfa)
-#         return empty_array(T)
-#     end
-#     if !array_dimensions_compatible(T, mfa)
-#         throw(incompatible_array_dimensions_exception(T, mfa))
-#     end
-#     if !type_compatible(T, mfa)
-#         throw(incompatible_datatypes_exception(T, mfa))
-#     end
-#     arr = new_array(T, mfa.dims, mfa.ndims)
-#     ptr = reinterpret(Ptr{Cstring}, mfa.data)
-#     for i in eachindex(arr)
-#         arr[i] = unsafe_string(unsafe_load(ptr, i))
-#     end
-#     arr
-# end
-
-# function convert_to_julia(::Type{T}, mfa::MATFrostArray) where {T<:Array{<:Union{Array, Tuple}}}
-#     if is_empty_array(mfa)
-#         return empty_array(T)
-#     end
-#     if !array_dimensions_compatible(T, mfa)
-#         throw(incompatible_array_dimensions_exception(T, mfa))
-#     end
-#     if !type_compatible(T, mfa)
-#         throw(incompatible_datatypes_exception(T, mfa))
-#     end
-#     ptr = reinterpret(Ptr{Ptr{MATFrostArray}}, mfa.data)
-#     arr = new_array(T, mfa.dims, mfa.ndims)
-#     for i in eachindex(arr)
-#         arr[i] = convert_to_julia(eltype(T), unsafe_load(unsafe_load(ptr, i)))
-#     end
-#     arr
-# end
-
-# function convert_to_julia(::Type{T}, mfafields::NTuple{N, MATFrostArray}) where {T, N}
-#     T(convert_to_julia.(fieldtypes(T), mfafields)...)
-# end
-
-# function convert_to_julia(::Type{T}, mfafields::NTuple{N, MATFrostArray}) where {T<:NamedTuple, N}
-#     T(convert_to_julia.(fieldtypes(T), mfafields))
-# end
-
-
-
-# function missing_fields_exception(::Type{T}, fieldnames_mat::Vector{Symbol}) where {T}
-#     missingfields  = join(("    " * string(missingfield)  for missingfield in  fieldnames(T) if !(missingfield in fieldnames_mat)), "\n")
-#     actualfields   = join(("    " * string(fieldnamemat)  for fieldnamemat in fieldnames_mat), "\n")
-#     expectedfields = join(("    " * string(fieldnamejl) * "::" * fieldtype for (fieldnamejl, fieldtype)  in zip(fieldnames(T), string.(fieldtypes(T)))), "\n")
-
-#     MATFrostException(
-#         "matfrostjulia:conversion:missingFields",
-# """
-# Converting to: $(string(T))
-
-# Input MATLAB struct value is missing fields.
-    
-# Missing fields: 
-# $(missingfields)
-
-# Actual fields:
-# $(actualfields)
-
-# Expected fields:
-# $(expectedfields)
-# """
-#     )
-# end        
-        
-# function additional_fields_exception(::Type{T}, fieldnames_mat::Vector{Symbol}) where {T}
-#     additionalfields  = join(("    " * string(additionalfield)  for additionalfield in fieldnames_mat if !(additionalfield in fieldnames(T) )), "\n")
-#     actualfields   = join(("    " * string(fieldnamemat)  for fieldnamemat in fieldnames_mat), "\n")
-#     expectedfields = join(("    " * string(fieldnamejl) * "::" * fieldtype for (fieldnamejl, fieldtype)  in zip(fieldnames(T), string.(fieldtypes(T)))), "\n")
-
-#     MATFrostException(
-#         "matfrostjulia:conversion:additionalFields",
-# """
-# Converting to: $(string(T))
-
-# Input MATLAB struct value has additional fields.
-    
-# Additional fields: 
-# $(additionalfields)
-
-# Actual fields:
-# $(actualfields)
-
-# Expected fields:
-# $(expectedfields)
-# """
-#     )
-# end        
-   
-
-# #if !(missingfield in fieldnames(T))
-
-
-# function convert_to_julia(::Type{T}, mfa::MATFrostArray) where {T}
-#     if !is_scalar_value(mfa)
-#         throw(not_scalar_value_exception(T, mfa))
-#     end
-#     if !type_compatible(T, mfa)
-#         throw(incompatible_datatypes_exception(T, mfa))
-#     end
-
-#     fieldnames_mat = [Symbol(unsafe_string(unsafe_load(mfa.fieldnames, i))) for i in 1:mfa.nfields]
-    
-#     if !all((fieldname_jl in fieldnames_mat) for fieldname_jl in fieldnames(T))
-#         throw(missing_fields_exception(T, fieldnames_mat))
-#     end
-
-#     if !all((fieldnamemat in fieldnames(T)) for fieldnamemat in fieldnames_mat)
-#         throw(additional_fields_exception(T, fieldnames_mat))
-#     end
-
-#     order = (fnjl -> Int64(findfirst(fnmat -> fnmat == fnjl, fieldnames_mat))).(fieldnames(T))
-    
-#     mfadata = reinterpret(Ptr{Ptr{MATFrostArray}}, mfa.data)
-    
-#     mfafields = (or -> unsafe_load(unsafe_load(mfadata, or))).(order)
-
-#     convert_to_julia(T, mfafields)
-# end
-
-# function convert_to_julia(::Type{T}, mfa::MATFrostArray) where {T<:Array}
-#     if is_empty_array(mfa)
-#         return empty_array(T)
-#     end
-#     if !array_dimensions_compatible(T, mfa)
-#         throw(incompatible_array_dimensions_exception(T, mfa))
-#     end
-#     if !type_compatible(T, mfa)
-#         throw(incompatible_datatypes_exception(T, mfa))
-#     end
-    
-#     fieldnames_mat = [Symbol(unsafe_string(unsafe_load(mfa.fieldnames, i))) for i in 1:mfa.nfields]
-
-#     if !all((fieldname_jl in fieldnames_mat) for fieldname_jl in fieldnames(eltype(T)))
-#         throw(missing_fields_exception(eltype(T), fieldnames_mat))
-#     end
-
-#     if !all((fieldnamemat in fieldnames(eltype(T))) for fieldnamemat in fieldnames_mat)
-#         throw(additional_fields_exception(eltype(T), fieldnames_mat))
-#     end
-    
-#     arr = new_array(T, mfa.dims, mfa.ndims) 
-    
-
-#     order = (fnjl -> Int64(findfirst(fnmat -> fnmat == fnjl, fieldnames_mat))).(fieldnames(eltype(T)))
-#     mfadata = reinterpret(Ptr{Ptr{MATFrostArray}}, mfa.data)
-    
-#     for j in eachindex(arr)  
-#         mfafields = (or -> unsafe_load(unsafe_load(mfadata, (j-1)*mfa.nfields + or))).(order)
-#         arr[j] = convert_to_julia(eltype(T), mfafields)
-#     end
-#     arr
-# end
-
-# function incompatible_tuple_shape(::Type{T}, mfa::MATFrostArray) where {T <: Tuple}
-#     actual_shape = join((string(unsafe_load(mfa.dims, i)) for i in 1:mfa.ndims), ", ")
-    
-#     actual_numdims = maximum(ifelse(unsafe_load(mfa.dims, i) != 1, i, 0) for i in 1:mfa.ndims; init=0)
-
-#     MATFrostException(
-#         "matfrostjulia:conversion:incompatibleArrayDimensions",
-# """
-# Converting to: $(string(T)) 
-
-# Array dimensions incompatible:
-#     Actual array dimensions:   numdims=$(string(actual_numdims)); dimensions=($(actual_shape))
-#     Expected array dimensions: numdims=1 (column-vector); ($(length(fieldnames(T))), 1)
-# """)
-# end
-
-# function convert_to_julia(::Type{T}, mfa::MATFrostArray) where {T <: Tuple}
-#     if !type_compatible(T, mfa)
-#         throw(incompatible_datatypes_exception(T, mfa))
-#     end
-#     if !(ifelse(mfa.ndims >= 1, unsafe_load(mfa.dims,1) == length(fieldnames(T)), false) && all(unsafe_load(mfa.dims, i) == 1 for i in 2:mfa.ndims))
-#         throw(incompatible_tuple_shape(T, mfa))
-#     end
-#     mfadata = reinterpret(Ptr{Ptr{MATFrostArray}}, mfa.data)
-#     convert_to_julia.(
-#         fieldtypes(T), 
-#         ntuple(i-> unsafe_load(unsafe_load(mfadata, i)), Val(length(fieldnames(T))))
-#     )
-# end
 
 
 end
