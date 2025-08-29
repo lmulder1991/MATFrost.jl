@@ -281,13 +281,13 @@ Read a scalar struct object.
 
             if (fieldname == fieldnames(T)[$(i)])
                 result = (@noinline read_matfrostarray!(io, $(fieldtypes(T)[i]))).x
+
                 if result isa Err    
-                    err = result::Err{MATFrostException}
                     discard_matfrostarray!(io, fieldcount(T) - fn_i)
-                    return MATFrostResult{T}(err.x)
+                    return MATFrostResult{T}(result.x)
                 end
-                ok = result::Ok{$(fieldtypes(T)[i])}
-                $(Symbol(:_lfv_, fieldnames(T)[i])) = ok.x
+
+                $(Symbol(:_lfv_, fieldnames(T)[i])) = result.x
             end
 
             end for i in eachindex(fieldnames(T))
@@ -336,12 +336,12 @@ function read_and_validate_matfrostarray_header!(io::BufferedStream, ::Type{T}) 
     nel = prod(header.dims; init=1)
     if (nel != 1)
         discard_matfrostarray_body!(io, header)
-        return Result{MATFrostArrayHeader, MATFrostException}(not_scalar_value_exception(T, header.dims))
+        return MATFrostResult{MATFrostArrayHeader}(not_scalar_value_exception(T, header.dims))
     elseif (header.type != expected_type)
         discard_matfrostarray_body!(io, header)
-        return Result{MATFrostArrayHeader, MATFrostException}(incompatible_datatypes_exception(T, header.type))
+        return MATFrostResult{MATFrostArrayHeader}(incompatible_datatypes_exception(T, header.type))
     end
-    Result{MATFrostArrayHeader, MATFrostException}(header)
+    MATFrostResult{MATFrostArrayHeader}(header)
 end
 
 
