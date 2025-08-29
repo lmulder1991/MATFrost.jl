@@ -1,32 +1,7 @@
 module _Read
 
-
 import ..MATFrost._Stream: read!, write!, flush!, BufferedStream, discard!
-
 using ..MATFrost: _MATFrostException as MATFrostException
-# using ..MATFrost: _MATFrostArray as MATFrostArray
-# using ..MATFrost: _MATFrostException as MATFrostException
-# using ..MATFrost._Stream: BufferedStream, 
-
-# function new_array(::Type{T}, dims::Ptr{Csize_t}, nel::Csize_t) where {T}
-#     T(undef, ntuple(i -> ifelse(i <= nel, unsafe_load(dims, i), Csize_t(1)), ndims(T)))
-# end
-
-struct MATFrostArrayHeader
-    type :: Int32
-    dims :: Vector{Int64}
-end
-
-
-function jldims(header::MATFrostArrayHeader, ::Val{N}) where N
-    ntuple(Val{N}()) do i
-        if 1 <= length(header.dims)
-            header.dims[i]
-        else
-            1
-        end
-    end
-end
 
 
 
@@ -50,6 +25,509 @@ struct Result{O, E}
 end
 
 const MATFrostResult{T} = Result{T, MATFrostException}
+
+
+
+
+struct MATFrostArrayHeader
+    type :: Int32
+    dims :: Vector{Int64}
+end
+
+
+
+
+
+function jldims(header::MATFrostArrayHeader, ::Val{N}) where N
+    ntuple(Val{N}()) do i
+        if 1 <= length(header.dims)
+            header.dims[i]
+        else
+            1
+        end
+    end
+end
+
+
+@noinline function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T <: Union{Number, Array{<:Number}, String, Array{<:String}}}
+    result = read_and_validate_matfrostarray_header!(io, T).x
+    
+    if isa(result, Ok)
+        result::Ok{MATFrostArrayHeader}
+        header = result.x
+        
+        read_matfrostarray!(io, T, header)
+    else
+        result::Err{MATFrostException}
+        MATFrostResult{T}(result.x)
+    end
+    
+end
+
+
+@generated function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T}
+    quote
+        result = read_and_validate_matfrostarray_header!(io, T).x
+        
+        if isa(result, Ok)
+            result::Ok{MATFrostArrayHeader}
+            header = result.x
+            
+            read_matfrostarray!(io, T, header)
+        else
+            result::Err{MATFrostException}
+            MATFrostResult{T}(result.x)
+        end
+    end
+end
+
+
+
+
+
+function read_matfrostarray!(io::BufferedStream, ::Type{T}, header::MATFrostArrayHeader) where {T <: Number}
+    v = read!(io, T)
+    MATFrostResult{T}(v)
+end
+
+function read_matfrostarray!(io::BufferedStream, ::Type{Array{T,N}}, header::MATFrostArrayHeader) where {N, T <: Number}
+    dims = jldims(header, Val{N}())
+    arr = Array{T,N}(undef, dims)
+    read!(io, arr)
+    MATFrostResult{Array{T,N}}(arr)
+end
+
+
+function read_matfrostarray!(io::BufferedStream, ::Type{String}, header::MATFrostArrayHeader)
+    s = read_string!(io)
+    MATFrostResult{String}(s)
+end
+
+
+function read_matfrostarray!(io::BufferedStream, ::Type{Array{String,N}}, header::MATFrostArrayHeader) where {N}
+    dims = jldims(header, Val{N}())
+    arr = Array{String, N}(undef, dims)
+    for i in eachindex(arr)
+        arr[i] = read_string!(io)
+    end
+    MATFrostResult{Array{String,N}}(arr)
+end
+
+
+
+@generated function read_matfrostarray!(io::BufferedStream, ::Type{Array{T,N}}, header::MATFrostArrayHeader) where {T <: Union{Array, Tuple}, N}
+    return quote
+        dims = jldims(header, Val{N}())
+        arr = Array{T, N}(undef, dims)
+        for i in eachindex(arr)
+            result = (@noinline read_matfrostarray!(io, T)).x
+            if result isa Ok
+                result::Ok{T}
+                arr[i] = result.x
+            else
+                result::Err{MATFrostException}
+                discard_matfrostarray!(io, length(arr) - i)
+                return MATFrostResult{Array{T, N}}(result.x)
+            end
+        end
+        MATFrostResult{Array{T, N}}(arr)
+    end
+end
+
+
+
+"""
+Read a tuple object.
+"""
+@generated function read_matfrostarray!(io::BufferedStream, ::Type{T}, header::MATFrostArrayHeader) where {T <: Tuple}
+    return quote
+        $((
+            quote
+                $(Symbol(:result, i)) = (@noinline read_matfrostarray!(io, $(fieldtypes(T)[i]))).x
+
+                if $(Symbol(:result, i)) isa Err
+                    discard_matfrostarray!(io, $(fieldcount(T)-i))
+                    err = $(Symbol(:result, i))::Err{MATFrostException}
+                    return MATFrostResult{T}(err.x)
+                end
+
+                $(Symbol(:v, i)) = ($(Symbol(:result, i))::Ok{$(fieldtypes(T)[i])}).x
+            end for i in eachindex(fieldtypes(T))
+        )...)
+
+        return MATFrostResult{T}(($((
+            Symbol(:v, i) for i in eachindex(fieldtypes(T))
+        )...),))
+
+    end
+end
+
+
+"""
+Read scalar struct object from MATFrostArray
+"""
+@generated function read_matfrostarray!(io::BufferedStream, ::Type{T}, header::MATFrostArrayHeader) where {T}
+    if isabstracttype(T)
+        return quote
+            discard_matfrostarray!(io)
+            MATFrostResult{T}(MATFrostException("Abstract types not supported!", ""))
+        end
+    end
+
+    return quote
+        fieldnames_mat_result = read_and_validate_matrfrostarray_struct_header!(io, fieldnames(T), header).x
+        if fieldnames_mat_result isa Err
+            fieldnames_mat_result::Err{MATFrostException}
+            return MATFrostResult{T}(fieldnames_mat_result.x)
+        end
+        fieldnames_mat = (fieldnames_mat_result::Ok{Vector{Symbol}}).x
+
+        read_matfrostarray_struct_object!(io, fieldnames_mat, T)
+        # MATFrostResult{T}(read_matfrostarray_struct_object!(io, fieldnames_mat, T))
+
+    end
+
+end
+
+"""
+Read array of struct objects from MATFrostArray
+"""
+@generated function read_matfrostarray!(io::BufferedStream, ::Type{Array{T,N}}, header::MATFrostArrayHeader) where {T,N}
+    if isabstracttype(T)
+        return quote
+            discard_matfrostarray!(io)
+            MATFrostResult{Array{T,N}}(MATFrostException("Abstract types not supported!", ""))
+        end
+    end
+
+
+    return quote
+        dims = jldims(header, Val{N}())
+
+        nel = prod(dims; init=1)
+
+        if nel == 0 
+            # Special behavior for empty arrays. 
+            # The matfrostarray object has already been cleared in read_matfrostarray_header!
+            return MATFrostResult{Array{T,N}}(Array{T,N}(undef, dims))
+        end
+        
+        fieldnames_mat_result = read_and_validate_matrfrostarray_struct_header!(io, fieldnames(T), header).x
+
+        if fieldnames_mat_result isa Err
+            fieldnames_mat_result::Err{MATFrostException}
+            return MATFrostResult{Array{T,N}}(fieldnames_mat_result.x)
+        end
+        
+        fieldnames_mat = (fieldnames_mat_result::Ok{Vector{Symbol}}).x
+
+
+        arr = Array{T,N}(undef, dims)
+        
+        for eli in eachindex(arr)
+            result = read_matfrostarray_struct_object!(io, fieldnames_mat, T).x
+            if result isa Ok
+                v = result::Ok{T}
+                arr[eli] = v.x
+            else
+                err = result::Err{MATFrostException}
+                discard_matfrostarray!(io, (nel-eli)*length(fieldnames_mat))
+                return MATFrostResult{Array{T,N}}(err.x)
+            end
+
+        end
+        MATFrostResult{Array{T,N}}(arr)
+    end
+
+end
+
+
+
+function read_and_validate_matrfrostarray_struct_header!(io::BufferedStream, expected_fieldnames::NTuple{N, Symbol}, header::MATFrostArrayHeader) where {N}
+    nel = prod(header.dims; init=1)
+
+    numfields_mat = read!(io, Int64)
+    fieldnames_mat = Vector{Symbol}(undef, numfields_mat)
+    fieldname_in_type = Vector{Bool}(undef, numfields_mat)
+    for i in eachindex(fieldnames_mat)
+        fieldnames_mat[i] = Symbol(read_string!(io))
+        fieldname_in_type[i] = fieldnames_mat[i] in expected_fieldnames
+    end
+    
+    if (numfields_mat != N || !all(fieldname_in_type))
+        discard_matfrostarray!(io, nel*numfields_mat)
+        return MATFrostResult{Vector{Symbol}}(MATFrostException(
+            "",
+            "Fieldnames do not match: \nExpected: $(expected_fieldnames...)" *
+            "\nRecieved: $(fieldnames_mat...)"
+        ))
+    end
+
+    return MATFrostResult{Vector{Symbol}}(fieldnames_mat)
+end
+
+
+"""
+Read a scalar struct object.
+"""
+@generated function read_matfrostarray_struct_object!(io::BufferedStream, fieldnames_mat::Vector{Symbol}, ::Type{T}) where{T}
+    quote
+        # Create local variables with type annotation, {Nothing, FieldType}
+        $((quote
+            $(Symbol(:_lfv_, fieldnames(T)[i])) :: Union{Nothing, $(fieldtypes(T)[i])} = nothing
+        end for i in eachindex(fieldnames(T)))...)
+
+        # Parse each field value. Parsing must be done in the order of MATFrostSequence
+        for fn_i in eachindex(fieldnames_mat)
+            fieldname = fieldnames_mat[fn_i]
+
+            $((
+            quote
+
+            if (fieldname == fieldnames(T)[$(i)])
+                result = (@noinline read_matfrostarray!(io, $(fieldtypes(T)[i]))).x
+                if result isa Err    
+                    err = result::Err{MATFrostException}
+                    discard_matfrostarray!(io, fieldcount(T) - fn_i)
+                    return MATFrostResult{T}(err.x)
+                end
+                ok = result::Ok{$(fieldtypes(T)[i])}
+                $(Symbol(:_lfv_, fieldnames(T)[i])) = ok.x
+            end
+
+            end for i in eachindex(fieldnames(T))
+            )...)
+
+        end
+
+        # Force {Nothing, FieldType} to FieldType
+        $((
+        quote
+
+            if $(Symbol(:_lfv_, fieldnames(T)[i])) isa Nothing
+                return MATFrostResult{T}(MATFrostException("", "Not complete"))
+            end
+            $(Symbol(:_lfva_, fieldnames(T)[i])) = $(Symbol(:_lfv_, fieldnames(T)[i])) :: $(fieldtypes(T)[i])
+        
+        end for i in eachindex(fieldnames(T))
+        )...)
+
+
+        
+
+        # Construct new struct
+        v = $(
+            if (T <: NamedTuple)
+                :(T(($((Symbol(:_lfva_, fieldnames(T)[i]) for i in eachindex(fieldnames(T)))...),)))
+            else    
+                :(T($((Symbol(:_lfva_, fieldnames(T)[i]) for i in eachindex(fieldnames(T)))...)))
+            end
+        )
+
+        MATFrostResult{T}(v)
+    end
+end
+
+
+
+
+
+
+function read_and_validate_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: MATFrostResult{MATFrostArrayHeader} where {T}
+
+    header = read_matfrostarray_header3!(io)
+
+    expected_type = expected_matlab_type(T)
+    nel = prod(header.dims; init=1)
+    if (nel != 1)
+        discard_matfrostarray_body!(io, header)
+        return Result{MATFrostArrayHeader, MATFrostException}(not_scalar_value_exception(T, header.dims))
+    elseif (header.type != expected_type)
+        discard_matfrostarray_body!(io, header)
+        return Result{MATFrostArrayHeader, MATFrostException}(incompatible_datatypes_exception(T, header.type))
+    end
+    Result{MATFrostArrayHeader, MATFrostException}(header)
+end
+
+
+function read_and_validate_matfrostarray_header!(io::BufferedStream, ::Type{Array{T,N}}) :: MATFrostResult{MATFrostArrayHeader} where {T,N}
+    header = read_matfrostarray_header3!(io)
+
+    expected_type = expected_matlab_type(Array{T,N})
+    
+    nel = prod(header.dims; init=1)
+
+    neljl = 1
+    for i = 1:min(N, length(header.dims))
+        neljl *= @inbounds header.dims[i]
+    end
+
+    if (nel != neljl)
+        discard_matfrostarray_body!(io, header)
+        return MATFrostResult{MATFrostArrayHeader}(incompatible_array_dimensions_exception(Array{T,N}, header.dims))
+    elseif (nel == 0)
+        # Special behavior if nel==0. For this case allow any datatype input. 
+        # MATLAB does not act strict on the datatype of empty values.
+
+        if header.type == STRUCT
+            nfields = read!(io, Int64)
+            for _ in 1:nfields
+                nb = read!(io, Int64)
+                discard!(io, nb)
+            end
+        end
+    elseif (header.type != expected_type)
+        discard_matfrostarray_body!(io, header)
+        return MATFrostResult{MATFrostArrayHeader}(incompatible_datatypes_exception(Array{T,N}, header.type))
+    end
+
+    return MATFrostResult{MATFrostArrayHeader}(header)
+
+end
+
+
+function read_and_validate_matfrostarray_header!(io::BufferedStream, ::Type{T}) where {T<:Tuple}
+    header = read_matfrostarray_header3!(io)
+    
+    expected_type = expected_matlab_type(T)
+
+    nel = prod(header.dims; init=1)
+
+    if ((nel != fieldcount(T)) || (header.dims[1] != nel))
+        discard_matfrostarray_body!(io, header)
+        return MATFrostResult{MATFrostArrayHeader}(MATFrostException("","Tuple error size does not match"))
+    elseif (header.type != expected_type)
+        discard_matfrostarray_body!(io, header)
+        return MATFrostResult{MATFrostArrayHeader}(incompatible_datatypes_exception(T, header.type))
+    end
+
+    return MATFrostResult{MATFrostArrayHeader}(header)
+
+end
+
+# function read_matrfrostarray_struct_header!(io::BufferedStream, expected_fieldnames::NTuple{N, Symbol}, nel::Int64) where {N}
+
+#     numfields_mat = read!(io, Int64)
+#     fieldnames_mat = Vector{Symbol}(undef, numfields_mat)
+#     fieldname_in_type = Vector{Bool}(undef, numfields_mat)
+#     for i in eachindex(fieldnames_mat)
+#         fieldnames_mat[i] = Symbol(read_string!(io))
+#         fieldname_in_type[i] = fieldnames_mat[i] in expected_fieldnames
+#     end
+    
+#     if (numfields_mat != N || !all(fieldname_in_type))
+#         discard_matfrostarray!(io, nel*numfields_mat)
+#         throw("Fieldnames do not match: \nExpected: " * string(expected_fieldnames) *
+#             "\nRecieved: " * string(fieldnames_mat))
+#     end
+
+#     return fieldnames_mat
+# end
+
+# """
+# Read a scalar struct object.
+# """
+# @generated function read_matfrostarray_struct_object!(io::BufferedStream, fieldnames_mat::Vector{Symbol}, ::Type{T}) where{T}
+#     quote
+#         # Create local variables with type annotation, {Nothing, FieldType}
+#         $((quote
+#             $(Symbol(:_lfv_, fieldnames(T)[i])) :: Union{Nothing, $(fieldtypes(T)[i])} = nothing
+#         end for i in eachindex(fieldnames(T)))...)
+
+#         # Parse each field value. Parsing must be done in the order of MATFrostSequence
+#         for fn_i in eachindex(fieldnames_mat)
+#             fieldname = fieldnames_mat[fn_i]
+#             try 
+#                 $((quote
+#                     if (fieldname == fieldnames(T)[$(i)])
+#                         $(Symbol(:_lfv_, fieldnames(T)[i])) = @noinline read_matfrostarray!(io, $(fieldtypes(T)[i]))
+#                     end
+#                 end for i in eachindex(fieldnames(T)))...)
+#             catch e
+#                 discard_matfrostarray!(io, length(fieldnames(T)) - fn_i)
+#                 throw(e)
+#             end
+#         end
+
+#         # Force {Nothing, FieldType} to FieldType
+#         $((quote
+#             $(Symbol(:_lfva_, fieldnames(T)[i])) :: $(fieldtypes(T)[i]) = $(Symbol(:_lfv_, fieldnames(T)[i]))
+#         end for i in eachindex(fieldnames(T)))...)
+
+#         # Construct new struct
+#         $(
+#             if (T <: NamedTuple)
+#                 :(T(($((Symbol(:_lfva_, fieldnames(T)[i]) for i in eachindex(fieldnames(T)))...),)))
+#             else    
+#                 :(T($((Symbol(:_lfva_, fieldnames(T)[i]) for i in eachindex(fieldnames(T)))...)))
+#             end
+#         )
+#     end
+# end
+
+# """
+# Read scalar struct object from MATFrostArray
+# """
+# @generated function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T}
+#     if isabstracttype(T)
+#         return quote
+#             discard_matfrostarray!(io)
+#             throw("Interface contains abstract type: " * string(T))
+#         end
+#     end
+
+#     return quote
+#         read_matfrostarray_header!(io, T)
+#         fieldnames_mat = read_matrfrostarray_struct_header!(io, fieldnames(T), 1)
+
+#         read_matfrostarray_struct_object!(io, fieldnames_mat, T)
+
+#     end
+
+# end
+
+# """
+# Read array of struct objects from MATFrostArray
+# """
+# @generated function read_matfrostarray!(io::BufferedStream, ::Type{Array{T,N}}) where {T,N}
+#     if isabstracttype(T)
+#         return quote
+#             discard_matfrostarray!(io)
+#             throw("Interface contains abstract type: " * string(T))
+#         end
+#     end
+
+
+#     return quote
+#         dims = read_matfrostarray_header!(io, Array{T,N})
+
+#         nel = prod(dims; init=1)
+
+#         if nel == 0 
+#             # Special behavior for empty arrays. 
+#             # The matfrostarray object has already been cleared in read_matfrostarray_header!
+#             return Array{T,N}(undef, dims)
+#         end
+        
+#         fieldnames_mat = read_matrfrostarray_struct_header!(io, fieldnames(T), nel)
+
+#         arr = Array{T,N}(undef, dims)
+        
+#         for eli in eachindex(arr)
+#             try
+#                 arr[eli] = read_matfrostarray_struct_object!(io, fieldnames_mat, T)
+#             catch e
+#                 discard_matfrostarray!(io, (nel-eli)*length(fieldnames_mat))
+#                 throw(e)
+#             end
+#         end
+#         arr
+#     end
+
+# end
+
+
+
 
 
 
@@ -590,34 +1068,6 @@ function validate_matfrostarray_type_and_size(io::BufferedStream, ::Type{T}, hea
     nothing
 end
 
-function validate_matfrostarray_type_and_size(io::BufferedStream, ::Type{T}, header::MATFrostArrayHeader) where {T<:Tuple}
-    expected_type = expected_matlab_type(T)
-    
-    if ((header.nel != length(fieldnames(T))) || (header.dims1[1] != header.nel))
-        discard_matfrostarray_body!(io, header)
-        throw("Tuple error size does not match")
-    elseif (header.type != expected_type)
-        discard_matfrostarray_body!(io, header)
-        throw(incompatible_datatypes_exception(T, header.type))
-    end
-
-    nothing
-end
-function read_and_validate_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: Result{MATFrostArrayHeader, MATFrostException} where {T}
-
-    header = read_matfrostarray_header3!(io)
-
-    expected_type = expected_matlab_type(T)
-    nel = prod(header.dims; init=1)
-    if (nel != 1)
-        discard_matfrostarray_body!(io, header)
-        return Result{MATFrostArrayHeader, MATFrostException}(not_scalar_value_exception(T, header.dims))
-    elseif (header.type != expected_type)
-        discard_matfrostarray_body!(io, header)
-        return Result{MATFrostArrayHeader, MATFrostException}(incompatible_datatypes_exception(T, header.type))
-    end
-    Result{MATFrostArrayHeader, MATFrostException}(header)
-end
 
 function read_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: Tuple{} where {T}
 
@@ -641,115 +1091,94 @@ end
 # end
 
 
-function read_and_validate_matfrostarray_header!(io::BufferedStream, ::Type{Array{T,N}}) :: Result{MATFrostArrayHeader, MATFrostException} where {T,N}
-    header = read_matfrostarray_header3!(io)
 
-    expected_type = expected_matlab_type(Array{T,N})
+
+# function read_matfrostarray_header!(io::BufferedStream, ::Type{Array{T,N}}) :: NTuple{N, Int64} where {T,N}
+
+#     header = read_matfrostarray_header3!(io)
+
+
+#     expected_type = expected_matlab_type(Array{T,N})
+
+#     # incompatible_datatypes = type != expected_type
+#     # incompatible_array_dimension = false
+
+
+#     jldims = ntuple(Val{N}()) do i
+#         if i <= length(header.dims)
+#             header.dims[i]
+#         else
+#             1
+#         end
+#     end
+
+#     nel = prod(header.dims; init=1)
+
+#     if (prod(jldims; init=1) != nel)
+#         discard_matfrostarray_body!(io, header)
+#         throw(incompatible_array_dimensions_exception(Array{T,N}, header.dims))
+#     elseif (nel == 0) 
+#         # Special behavior if nel==0. For this case allow any datatype input. 
+#         # MATLAB does not act strict on the datatype of empty values.
+
+#         if header.type == STRUCT
+#             nfields = read!(io, Int64)
+#             for _ in 1:nfields
+#                 nb = read!(io, Int64)
+#                 discard!(io, nb)
+#             end
+#         end
+#     elseif (header.type != expected_type)
+#         discard_matfrostarray_body!(io, header)
+#         throw(incompatible_datatypes_exception(Array{T,N}, header.type))
+#     end
+
+
+#     return jldims
+# end
+
+
+
+# function validate_matfrostarray_type_and_size(io::BufferedStream, ::Type{T}, header::MATFrostArrayHeader) where {T<:Tuple}
+#     expected_type = expected_matlab_type(T)
     
-    nel = prod(header.dims; init=1)
+#     if ((header.nel != length(fieldnames(T))) || (header.dims1[1] != header.nel))
+#         discard_matfrostarray_body!(io, header)
+#         throw("Tuple error size does not match")
+#     elseif (header.type != expected_type)
+#         discard_matfrostarray_body!(io, header)
+#         throw(incompatible_datatypes_exception(T, header.type))
+#     end
 
-    neljl = 1
-    for i = 1:min(N, length(header.dims))
-        neljl *= @inbounds header.dims[i]
-    end
+#     nothing
+# end
 
-    if (nel != neljl)
-        discard_matfrostarray_body!(io, header)
-        return Result{MATFrostArrayHeader, MATFrostException}(incompatible_array_dimensions_exception(Array{T,N}, header.dims))
-    elseif (nel == 0)
-        # Special behavior if nel==0. For this case allow any datatype input. 
-        # MATLAB does not act strict on the datatype of empty values.
+# function read_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: NTuple{1, Int64} where {T <: Tuple}
 
-        if header.type == STRUCT
-            nfields = read!(io, Int64)
-            for _ in 1:nfields
-                nb = read!(io, Int64)
-                discard!(io, nb)
-            end
-        end
-    elseif (header.type != expected_type)
-        discard_matfrostarray_body!(io, header)
-        return Result{MATFrostArrayHeader, MATFrostException}(incompatible_datatypes_exception(Array{T,N}, header.type))
-    end
-
-    return Result{MATFrostArrayHeader, MATFrostException}(header)
+#     header = read_matfrostarray_header3!(io)
 
 
+#     expected_type = expected_matlab_type(T)
 
-end
-
-function read_matfrostarray_header!(io::BufferedStream, ::Type{Array{T,N}}) :: NTuple{N, Int64} where {T,N}
-
-    header = read_matfrostarray_header3!(io)
-
-
-    expected_type = expected_matlab_type(Array{T,N})
-
-    # incompatible_datatypes = type != expected_type
-    # incompatible_array_dimension = false
-
-
-    jldims = ntuple(Val{N}()) do i
-        if i <= length(header.dims)
-            header.dims[i]
-        else
-            1
-        end
-    end
-
-    nel = prod(header.dims; init=1)
-
-    if (prod(jldims; init=1) != nel)
-        discard_matfrostarray_body!(io, header)
-        throw(incompatible_array_dimensions_exception(Array{T,N}, header.dims))
-    elseif (nel == 0) 
-        # Special behavior if nel==0. For this case allow any datatype input. 
-        # MATLAB does not act strict on the datatype of empty values.
-
-        if header.type == STRUCT
-            nfields = read!(io, Int64)
-            for _ in 1:nfields
-                nb = read!(io, Int64)
-                discard!(io, nb)
-            end
-        end
-    elseif (header.type != expected_type)
-        discard_matfrostarray_body!(io, header)
-        throw(incompatible_datatypes_exception(Array{T,N}, header.type))
-    end
+#     jldims = (
+#         if 1 <= length(header.dims)
+#             header.dims[1]
+#         else
+#             1
+#         end
+#     )
+#     nel = prod(dims; init=1)
+#     if ((nel != length(fieldnames(T))) || (jldims[1] != nel))
+#         discard_matfrostarray_body!(io, header)
+#         throw("Tuple error size does not match")
+#     elseif (header.type != expected_type)
+#         discard_matfrostarray_body!(io, header)
+#         throw(incompatible_datatypes_exception(T, header.type))
+#     end
 
 
-    return jldims
-end
-
-
-
-function read_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: NTuple{1, Int64} where {T <: Tuple}
-
-    header = read_matfrostarray_header3!(io)
-
-
-    expected_type = expected_matlab_type(T)
-
-    jldims = (
-        if 1 <= length(header.dims)
-            header.dims[1]
-        else
-            1
-        end
-    )
-    nel = prod(dims; init=1)
-    if ((nel != length(fieldnames(T))) || (jldims[1] != nel))
-        discard_matfrostarray_body!(io, header)
-        throw("Tuple error size does not match")
-    elseif (header.type != expected_type)
-        discard_matfrostarray_body!(io, header)
-        throw(incompatible_datatypes_exception(T, header.type))
-    end
-
-
-    return jldims
-end
+#     return jldims
+# end
 
 
 
@@ -768,89 +1197,6 @@ end
 #     # process(result.x)
 # end
 
-
-function read_matfrostarray!(io::BufferedStream, ::Type{T}, header::MATFrostArrayHeader) where {T <: Number}
-    v = read!(io, T)
-    MATFrostResult{T}(v)
-end
-
-function read_matfrostarray!(io::BufferedStream, ::Type{Array{T,N}}, header::MATFrostArrayHeader) where {N, T <: Number}
-    dims = jldims(header, Val{N}())
-    arr = Array{T,N}(undef, dims)
-    read!(io, arr)
-    MATFrostResult{Array{T,N}}(arr)
-end
-
-
-function read_matfrostarray!(io::BufferedStream, ::Type{String}, header::MATFrostArrayHeader)
-    s = read_string!(io)
-    MATFrostResult{String}(s)
-end
-
-
-function read_matfrostarray!(io::BufferedStream, ::Type{Array{String,N}}, header::MATFrostArrayHeader) where {N}
-    dims = jldims(header, Val{N}())
-    arr = Array{String, N}(undef, dims)
-    for i in eachindex(arr)
-        arr[i] = read_string!(io)
-    end
-    MATFrostResult{Array{String,N}}(arr)
-end
-
-
-@noinline function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T <: Union{Number, Array{<:Number}, String, Array{<:String}}}
-    result = read_and_validate_matfrostarray_header!(io, T).x
-    
-    if isa(result, Ok)
-        result::Ok{MATFrostArrayHeader}
-        header = result.x
-        
-        read_matfrostarray!(io, T, header)
-    else
-        result::Err{MATFrostException}
-        MATFrostResult{T}(result.x)
-    end
-    
-end
-
-
-
-@generated function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T}
-    quote
-        result = read_and_validate_matfrostarray_header!(io, T).x
-        
-        if isa(result, Ok)
-            result::Ok{MATFrostArrayHeader}
-            header = result.x
-            
-            read_matfrostarray!(io, T, header)
-        else
-            result::Err{MATFrostException}
-            MATFrostResult{T}(result.x)
-        end
-    end
-end
-
-
-
-@generated function read_matfrostarray!(io::BufferedStream, ::Type{Array{T, N}}, header::MATFrostArrayHeader) where {T <: Array, N}
-    return quote
-        dims = jldims(header, Val{N}())
-        arr = Array{T, N}(undef, dims)
-        for i in eachindex(arr)
-            result = (@noinline read_matfrostarray!(io, T)).x
-            if result isa Ok
-                result::Ok{T}
-                arr[i] = result.x
-            else
-                result::Err{MATFrostException}
-                discard_matfrostarray!(io, length(arr) - i)
-                return MATFrostResult{Array{T,N}}(result.x)
-            end
-        end
-        MATFrostResult{Array{T,N}}(arr)
-    end
-end
 
 
 # """
