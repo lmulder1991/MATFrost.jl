@@ -122,10 +122,8 @@ end
         for i in eachindex(arr)
             result = (@noinline read_matfrostarray!(io, T)).x
             if result isa Ok
-                result::Ok{T}
                 arr[i] = result.x
             else
-                result::Err{MATFrostException}
                 discard_matfrostarray!(io, length(arr) - i)
                 return MATFrostResult{Array{T, N}}(result.x)
             end
@@ -143,15 +141,15 @@ Read a tuple object.
     return quote
         $((
             quote
-                $(Symbol(:result, i)) = (@noinline read_matfrostarray!(io, $(fieldtypes(T)[i]))).x
+                result = (@noinline read_matfrostarray!(io, $(fieldtypes(T)[i]))).x
 
-                if $(Symbol(:result, i)) isa Err
+                if result isa Err
                     discard_matfrostarray!(io, $(fieldcount(T)-i))
-                    err = $(Symbol(:result, i))::Err{MATFrostException}
-                    return MATFrostResult{T}(err.x)
+                    return MATFrostResult{T}(result.x)
                 end
 
-                $(Symbol(:v, i)) = ($(Symbol(:result, i))::Ok{$(fieldtypes(T)[i])}).x
+                $(Symbol(:v, i)) = result.x
+
             end for i in eachindex(fieldtypes(T))
         )...)
 

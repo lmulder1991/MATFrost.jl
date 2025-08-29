@@ -108,7 +108,12 @@ _writebuffer!(stream, 3)
 _writematfrostarray!(stream, 23)
 _writematfrostarray!(stream, 23.0)
 _writematfrostarray!(stream, Int32(23))
+
 @test MATFrost._Read.read_matfrostarray!(stream,Tuple{Int64, Float64, Int32}).x.x == (23, 23.0, Int32(23))
+
+@test_opt MATFrost._Read.read_matfrostarray!(stream, Tuple{Int64, Float64, Int32})
+@test_call MATFrost._Read.read_matfrostarray!(stream, Tuple{Int64, Float64, Int32})
+
 
 
 
