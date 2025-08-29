@@ -53,7 +53,7 @@ function _clearbuffer(io)
 end
 
 
-stream = MATFrost._Stream.BufferedStream(C_NULL, Vector{UInt8}(undef, 2 << 8), 0, 0)
+stream = MATFrost._Stream.BufferedStream(C_NULL, Vector{UInt8}(undef, 2 << 16), 0, 0)
 
 _writebuffer!(stream, MATFrost._Read.INT64)
 _writebuffer!(stream, 2)
@@ -155,10 +155,10 @@ _writebuffer!(stream, "d")
 
 arr = Matrix{TestStruct1}(undef, 3, 4)
 for i in 1:12
-arr[i] = TestStruct1(Float64(i), i, string(i))
-_writematfrostarray!(stream, Float64(i))
-_writematfrostarray!(stream, i)
-_writematfrostarray!(stream, string(i))
+    arr[i] = TestStruct1(Float64(i), i, string(i))
+    _writematfrostarray!(stream, Float64(i))
+    _writematfrostarray!(stream, i)
+    _writematfrostarray!(stream, string(i))
 end
 
 @test MATFrost._Read.read_matfrostarray!(stream, Matrix{TestStruct1}).x.x == arr

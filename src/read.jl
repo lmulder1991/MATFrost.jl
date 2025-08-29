@@ -175,15 +175,15 @@ Read scalar struct object from MATFrostArray
     end
 
     return quote
-        fieldnames_mat_result = read_and_validate_matrfrostarray_struct_header!(io, fieldnames(T), header).x
-        if fieldnames_mat_result isa Err
-            fieldnames_mat_result::Err{MATFrostException}
-            return MATFrostResult{T}(fieldnames_mat_result.x)
+
+        result = read_and_validate_matrfrostarray_struct_header!(io, fieldnames(T), header).x
+        if result isa Err
+            return MATFrostResult{T}(result.x)
         end
-        fieldnames_mat = (fieldnames_mat_result::Ok{Vector{Symbol}}).x
+        fieldnames_mat = result.x
+
 
         read_matfrostarray_struct_object!(io, fieldnames_mat, T)
-        # MATFrostResult{T}(read_matfrostarray_struct_object!(io, fieldnames_mat, T))
 
     end
 
@@ -212,14 +212,11 @@ Read array of struct objects from MATFrostArray
             return MATFrostResult{Array{T,N}}(Array{T,N}(undef, dims))
         end
         
-        fieldnames_mat_result = read_and_validate_matrfrostarray_struct_header!(io, fieldnames(T), header).x
-
-        if fieldnames_mat_result isa Err
-            fieldnames_mat_result::Err{MATFrostException}
-            return MATFrostResult{Array{T,N}}(fieldnames_mat_result.x)
+        result = read_and_validate_matrfrostarray_struct_header!(io, fieldnames(T), header).x
+        if result isa Err
+            return MATFrostResult{Array{T,N}}(result.x)
         end
-        
-        fieldnames_mat = (fieldnames_mat_result::Ok{Vector{Symbol}}).x
+        fieldnames_mat = result.x
 
 
         arr = Array{T,N}(undef, dims)
@@ -227,12 +224,10 @@ Read array of struct objects from MATFrostArray
         for eli in eachindex(arr)
             result = read_matfrostarray_struct_object!(io, fieldnames_mat, T).x
             if result isa Ok
-                v = result::Ok{T}
-                arr[eli] = v.x
+                arr[eli] = result.x
             else
-                err = result::Err{MATFrostException}
                 discard_matfrostarray!(io, (nel-eli)*length(fieldnames_mat))
-                return MATFrostResult{Array{T,N}}(err.x)
+                return MATFrostResult{Array{T,N}}(result.x)
             end
 
         end
@@ -256,6 +251,8 @@ function read_and_validate_matrfrostarray_struct_header!(io::BufferedStream, exp
     
     if (numfields_mat != N || !all(fieldname_in_type))
         discard_matfrostarray!(io, nel*numfields_mat)
+
+        
         return MATFrostResult{Vector{Symbol}}(MATFrostException(
             "",
             "Fieldnames do not match: \nExpected: $(expected_fieldnames...)" *
@@ -404,127 +401,6 @@ function read_and_validate_matfrostarray_header!(io::BufferedStream, ::Type{T}) 
     return MATFrostResult{MATFrostArrayHeader}(header)
 
 end
-
-# function read_matrfrostarray_struct_header!(io::BufferedStream, expected_fieldnames::NTuple{N, Symbol}, nel::Int64) where {N}
-
-#     numfields_mat = read!(io, Int64)
-#     fieldnames_mat = Vector{Symbol}(undef, numfields_mat)
-#     fieldname_in_type = Vector{Bool}(undef, numfields_mat)
-#     for i in eachindex(fieldnames_mat)
-#         fieldnames_mat[i] = Symbol(read_string!(io))
-#         fieldname_in_type[i] = fieldnames_mat[i] in expected_fieldnames
-#     end
-    
-#     if (numfields_mat != N || !all(fieldname_in_type))
-#         discard_matfrostarray!(io, nel*numfields_mat)
-#         throw("Fieldnames do not match: \nExpected: " * string(expected_fieldnames) *
-#             "\nRecieved: " * string(fieldnames_mat))
-#     end
-
-#     return fieldnames_mat
-# end
-
-# """
-# Read a scalar struct object.
-# """
-# @generated function read_matfrostarray_struct_object!(io::BufferedStream, fieldnames_mat::Vector{Symbol}, ::Type{T}) where{T}
-#     quote
-#         # Create local variables with type annotation, {Nothing, FieldType}
-#         $((quote
-#             $(Symbol(:_lfv_, fieldnames(T)[i])) :: Union{Nothing, $(fieldtypes(T)[i])} = nothing
-#         end for i in eachindex(fieldnames(T)))...)
-
-#         # Parse each field value. Parsing must be done in the order of MATFrostSequence
-#         for fn_i in eachindex(fieldnames_mat)
-#             fieldname = fieldnames_mat[fn_i]
-#             try 
-#                 $((quote
-#                     if (fieldname == fieldnames(T)[$(i)])
-#                         $(Symbol(:_lfv_, fieldnames(T)[i])) = @noinline read_matfrostarray!(io, $(fieldtypes(T)[i]))
-#                     end
-#                 end for i in eachindex(fieldnames(T)))...)
-#             catch e
-#                 discard_matfrostarray!(io, length(fieldnames(T)) - fn_i)
-#                 throw(e)
-#             end
-#         end
-
-#         # Force {Nothing, FieldType} to FieldType
-#         $((quote
-#             $(Symbol(:_lfva_, fieldnames(T)[i])) :: $(fieldtypes(T)[i]) = $(Symbol(:_lfv_, fieldnames(T)[i]))
-#         end for i in eachindex(fieldnames(T)))...)
-
-#         # Construct new struct
-#         $(
-#             if (T <: NamedTuple)
-#                 :(T(($((Symbol(:_lfva_, fieldnames(T)[i]) for i in eachindex(fieldnames(T)))...),)))
-#             else    
-#                 :(T($((Symbol(:_lfva_, fieldnames(T)[i]) for i in eachindex(fieldnames(T)))...)))
-#             end
-#         )
-#     end
-# end
-
-# """
-# Read scalar struct object from MATFrostArray
-# """
-# @generated function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T}
-#     if isabstracttype(T)
-#         return quote
-#             discard_matfrostarray!(io)
-#             throw("Interface contains abstract type: " * string(T))
-#         end
-#     end
-
-#     return quote
-#         read_matfrostarray_header!(io, T)
-#         fieldnames_mat = read_matrfrostarray_struct_header!(io, fieldnames(T), 1)
-
-#         read_matfrostarray_struct_object!(io, fieldnames_mat, T)
-
-#     end
-
-# end
-
-# """
-# Read array of struct objects from MATFrostArray
-# """
-# @generated function read_matfrostarray!(io::BufferedStream, ::Type{Array{T,N}}) where {T,N}
-#     if isabstracttype(T)
-#         return quote
-#             discard_matfrostarray!(io)
-#             throw("Interface contains abstract type: " * string(T))
-#         end
-#     end
-
-
-#     return quote
-#         dims = read_matfrostarray_header!(io, Array{T,N})
-
-#         nel = prod(dims; init=1)
-
-#         if nel == 0 
-#             # Special behavior for empty arrays. 
-#             # The matfrostarray object has already been cleared in read_matfrostarray_header!
-#             return Array{T,N}(undef, dims)
-#         end
-        
-#         fieldnames_mat = read_matrfrostarray_struct_header!(io, fieldnames(T), nel)
-
-#         arr = Array{T,N}(undef, dims)
-        
-#         for eli in eachindex(arr)
-#             try
-#                 arr[eli] = read_matfrostarray_struct_object!(io, fieldnames_mat, T)
-#             catch e
-#                 discard_matfrostarray!(io, (nel-eli)*length(fieldnames_mat))
-#                 throw(e)
-#             end
-#         end
-#         arr
-#     end
-
-# end
 
 
 
