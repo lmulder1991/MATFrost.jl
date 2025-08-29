@@ -53,12 +53,8 @@ end
     result = read_and_validate_matfrostarray_header!(io, T).x
     
     if isa(result, Ok)
-        result::Ok{MATFrostArrayHeader}
-        header = result.x
-        
-        read_matfrostarray!(io, T, header)
+        read_matfrostarray!(io, T, result.x)
     else
-        result::Err{MATFrostException}
         MATFrostResult{T}(result.x)
     end
     
@@ -68,14 +64,9 @@ end
 @generated function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T}
     quote
         result = read_and_validate_matfrostarray_header!(io, T).x
-        
-        if isa(result, Ok)
-            result::Ok{MATFrostArrayHeader}
-            header = result.x
-            
-            read_matfrostarray!(io, T, header)
+        if isa(result, Ok)           
+            read_matfrostarray!(io, T, result.x)
         else
-            result::Err{MATFrostException}
             MATFrostResult{T}(result.x)
         end
     end
