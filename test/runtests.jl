@@ -3,6 +3,8 @@ using MATFrost
 using Test
 using JET
 
+
+
 function _writebuffer!(io::MATFrost._Stream.BufferedStream, v::T) where T
     p = reinterpret(Ptr{T}, pointer(io.buffer) + io.available)
     unsafe_store!(p, v)
@@ -30,7 +32,8 @@ _writebuffer!(stream, 1)
 _writebuffer!(stream, 1)
 _writebuffer!(stream, 4321)
 
-@test MATFrost._Read.read_matfrostarray!(stream, Int64) == 4321
+@test MATFrost._Read.read_matfrostarray!(stream, Int64).x.x == 4321
+@test_opt MATFrost._Read.read_matfrostarray!(stream, Int64)
 
 
 _clearbuffer(stream)
@@ -40,7 +43,7 @@ _writebuffer!(stream, 4)
 _writebuffer!(stream, 3)
 foreach(i -> _writebuffer!(stream, i), 1:12)
 
-@test MATFrost._Read.read_matfrostarray!(stream, Matrix{Int64}) == collect(reshape(1:12, (4,3))) 
+@test MATFrost._Read.read_matfrostarray!(stream, Matrix{Int64}).x.x == collect(reshape(1:12, (4,3))) 
 
 
 struct TestStruct1
