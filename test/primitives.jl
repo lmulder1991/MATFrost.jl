@@ -77,6 +77,25 @@ primitive_tests = (
 
 end
 
+
+@testset "String-Scalar" begin
+    _clearbuffer!(stream)
+    _writebuffermatfrostarray!(stream, "Test4321")
+    stream.available += 20
+    @test read_matfrostarray!(stream, String).x.x == "Test4321"
+    @test stream.available - stream.position == 20
+end
+
+
+@testset "String-Array" begin
+    _clearbuffer!(stream)
+    _writebuffermatfrostarray!(stream, ["Test4321", "Test1234", "Test6789"])
+    stream.available += 20
+    @test read_matfrostarray!(stream, Vector{String}).x.x == ["Test4321", "Test1234", "Test6789"]
+    @test stream.available - stream.position == 20
+end
+
+
 # @testset "Primitives-JET-Opt" begin
 #     @testset "JET-Opt" begin
 #         @test_opt read_matfrostarray!(stream, Int64)

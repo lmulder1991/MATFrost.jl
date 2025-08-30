@@ -50,7 +50,7 @@ function _writebuffermatfrostarray!(io::BufferedStream, arr::Array{T,N}) where {
 end
 
 function _writebuffermatfrostarray!(io::BufferedStream, arr::Array{String,N}) where {N}
-    _writebuffer!(io, expected_matlab_type(Array{T,N}))
+    _writebuffer!(io, expected_matlab_type(Array{String,N}))
     _writebuffer!(io, N)
     dims = size(arr)
     for dim in dims
