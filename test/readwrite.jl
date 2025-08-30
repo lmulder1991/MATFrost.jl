@@ -1,3 +1,10 @@
+
+
+"""
+This file contains inefficiently written code to map julia objects to matfrostarray. 
+Buffer is supposed to be big enough.
+"""
+
 """
 Write to buffer in a unsafe manner
 """
@@ -7,11 +14,7 @@ function _writebuffer!(io::BufferedStream, v::T) where T
     io.available += sizeof(T)
 end
 
-# function _writebuffer!(io::MATFrost._Stream.BufferedStream, v::String)
-#     p = reinterpret(Ptr{T}, pointer(io.buffer) + io.available)
-#     unsafe_store!(p, v)
-#     io.available += sizeof(T)
-# end
+
 
 function _writebuffer!(io::BufferedStream, s::String)
     _writebuffer!(io, ncodeunits(s))
@@ -26,15 +29,10 @@ function _writebuffer!(io::BufferedStream, s::String)
 end
 
 
-function _writebuffermatfrostarray!(io::BufferedStream, v::T) where {T <: Union{Number, String}}
-    _writebuffer!(io, expected_matlab_type(T))
-    _writebuffer!(io, 1)
-    _writebuffer!(io, 1)
-    _writebuffer!(io, v)
-end
 
-
-
+"""
+Primitive arrays
+"""
 function _writebuffermatfrostarray!(io::BufferedStream, arr::Array{T,N}) where {T <: Number,N}
     _writebuffer!(io, expected_matlab_type(Array{T,N}))
     _writebuffer!(io, Int64(N))
@@ -49,6 +47,9 @@ function _writebuffermatfrostarray!(io::BufferedStream, arr::Array{T,N}) where {
     io.available += nb
 end
 
+"""
+String arrays
+"""
 function _writebuffermatfrostarray!(io::BufferedStream, arr::Array{String,N}) where {N}
     _writebuffer!(io, expected_matlab_type(Array{String,N}))
     _writebuffer!(io, Int64(N))
@@ -61,6 +62,10 @@ function _writebuffermatfrostarray!(io::BufferedStream, arr::Array{String,N}) wh
     end
 end
 
+
+"""
+Struct arrays and Named tuple arrays
+"""
 function _writebuffermatfrostarray!(io::BufferedStream, arr::Array{T,N}) where {T,N}
     _writebuffer!(io, expected_matlab_type(Array{T,N}))
     _writebuffer!(io, Int64(N))
@@ -79,12 +84,48 @@ function _writebuffermatfrostarray!(io::BufferedStream, arr::Array{T,N}) where {
         end
 
     end
-
 end
 
+
+
+"""
+Tuple
+"""
+function _writebuffermatfrostarray!(io::BufferedStream, tup::T) where {T <: Tuple}
+    _writebuffer!(io, expected_matlab_type(T))
+    _writebuffer!(io, 1)
+    _writebuffer!(io, length(tup))
+
+    for el in tup
+        _writebuffermatfrostarray!(io, el)
+    end
+    
+end
+
+
+"""
+Tuple arrays and Array of arrays
+"""
+function _writebuffermatfrostarray!(io::BufferedStream, arr::Array{T,N}) where {T <: Union{Array, Tuple}, N}
+    _writebuffer!(io, expected_matlab_type(Array{T,N}))
+    _writebuffer!(io, Int64(N))
+    dims = size(arr)
+    for dim in dims
+        _writebuffer!(io, dim)
+    end
+    for i in eachindex(arr)
+        el = arr[i]
+        _writebuffermatfrostarray!(io, el)
+    end
+end
+
+
+
+"""
+Map scalar to array
+"""
 function _writebuffermatfrostarray!(io::BufferedStream, v::T) where {T}
     _writebuffermatfrostarray!(io, T[v])
-  
 end
 
 

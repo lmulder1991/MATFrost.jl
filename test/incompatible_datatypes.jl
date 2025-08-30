@@ -3,12 +3,7 @@
 
 stream = BufferedStream(C_NULL, Vector{UInt8}(undef, 2 << 16), 0, 0)
 
-struct StructTestID1
-    a::Float64
-    b::Int64
-    d::String
 
-end
 
 primitive_tests = (
     (Float32, Float32(4321)),
@@ -25,8 +20,12 @@ primitive_tests = (
 
     (String, "TestString"),
 
-    (StructTestID1, StructTestID1(3.0, 3, "FEFE"))
+    (StructTest1, StructTest1(3.0, 3, "FEFE")),
 
+    (Tuple{Float64, Int64, String}, (3.0, 3, "FEFE"))
+
+
+    
 )
 
 
