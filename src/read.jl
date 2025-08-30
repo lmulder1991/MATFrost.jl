@@ -265,16 +265,16 @@ Read a scalar struct object.
 
         # Parse each field value. Parsing must be done in the order of MATFrostSequence
         for fn_i in eachindex(fieldnames_mat)
-            fieldname = fieldnames_mat[fn_i]
+            fn_mat = fieldnames_mat[fn_i]
 
             $((
             quote
 
-            if (fieldname == fieldnames(T)[$(i)])
+            if (fn_mat == fieldnames(T)[$(i)])
                 result = (@noinline read_matfrostarray!(io, $(fieldtypes(T)[i]))).x
 
                 if result isa Err    
-                    discard_matfrostarray!(io, fieldcount(T) - fn_i)
+                    discard_matfrostarray!(io, length(fieldnames_mat) - fn_i)
                     return MATFrostResult{T}(result.x)
                 end
 
@@ -286,27 +286,17 @@ Read a scalar struct object.
 
         end
 
-        # Force {Nothing, FieldType} to FieldType
-        $((
-        quote
-
-            if $(Symbol(:_lfv_, fieldnames(T)[i])) isa Nothing
-                return MATFrostResult{T}(MATFrostException("", "Not complete"))
-            end
-            $(Symbol(:_lfva_, fieldnames(T)[i])) = $(Symbol(:_lfv_, fieldnames(T)[i])) :: $(fieldtypes(T)[i])
-        
-        end for i in eachindex(fieldnames(T))
-        )...)
-
-
-        
+        # Check if all values are given value
+        if $((x = :(false) ; for fn in fieldnames(T) ; x = :(($(Symbol(:_lfv_, fn)) isa Nothing) || $(x)) ; end ; x))
+            return MATFrostResult{T}(MATFrostException("", "Value not initalized"))
+        end       
 
         # Construct new struct
         v = $(
             if (T <: NamedTuple)
-                :(T(($((Symbol(:_lfva_, fieldnames(T)[i]) for i in eachindex(fieldnames(T)))...),)))
+                :(T(($((Symbol(:_lfv_, fn) for fn in fieldnames(T))...),)))
             else    
-                :(T($((Symbol(:_lfva_, fieldnames(T)[i]) for i in eachindex(fieldnames(T)))...)))
+                :(T($((Symbol(:_lfv_, fn) for fn in fieldnames(T))...)))
             end
         )
 

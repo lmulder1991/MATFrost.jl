@@ -75,8 +75,8 @@ _writebuffermatfrostarray!(stream, 321)
 _writebuffermatfrostarray!(stream, "321")
 
 @test MATFrost._Read.read_matfrostarray!(stream, TestStruct1).x.x == TestStruct1(321.0, 321, "321")
-# @test_opt MATFrost._Read.read_matfrostarray!(stream,  TestStruct1)
-# @test_call MATFrost._Read.read_matfrostarray!(stream, TestStruct1)
+@test_opt MATFrost._Read.read_matfrostarray!(stream,  TestStruct1)
+@test_call MATFrost._Read.read_matfrostarray!(stream, TestStruct1)
 
 
 
