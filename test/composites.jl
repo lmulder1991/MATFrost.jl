@@ -19,6 +19,16 @@ struct StructTest3
 end
 
 
+struct StructTest4
+    tup_scalar::Tuple{String, Int64, Float64}
+    tup_vector::Vector{Tuple{String, Int64, Float64}}
+    namedtup_scalar::@NamedTuple{v1::Float64, v2::String}
+    namedtup_vector::Vector{@NamedTuple{v1::Float64, v2::String}}
+    nest_vector::Vector{StructTest3}
+
+end
+
+
 stream = BufferedStream(C_NULL, Vector{UInt8}(undef, 2 << 20), 0, 0)
 
 """
@@ -73,6 +83,55 @@ end
     _writebuffermatfrostarray!(stream, arr)
     stream.available += 20
     @test read_matfrostarray!(stream, Vector{StructTest1}).x.x == arr
+    @test stream.available - stream.position == 20
+end
+
+
+
+@testset "Simple Tuple" begin
+    _clearbuffer!(stream)
+    v = (3223,3.0,3,"EWFW")
+    _writebuffermatfrostarray!(stream, v)
+    stream.available += 20
+    @test read_matfrostarray!(stream, Tuple{Int64, Float64, Int64, String}).x.x == v
+    @test stream.available - stream.position == 20
+end
+
+@testset "Vector of tuple" begin
+    _clearbuffer!(stream)
+    v1 = (3223,3.0,5,"12Test34")
+    v2 = (544,632.0,23,"44Test44")
+    v3 = (345,-6851.0,43,"1111")
+
+    arr = Tuple{Int64, Float64, Int64, String}[v1, v2, v3, v1, v3, v2]
+    _writebuffermatfrostarray!(stream, arr)
+    stream.available += 20
+    @test read_matfrostarray!(stream, Vector{Tuple{Int64, Float64, Int64, String}}).x.x == arr
+    @test stream.available - stream.position == 20
+end
+
+
+@testset "Simple NamedTuple" begin
+    _clearbuffer!(stream)
+    NT = NamedTuple{(:v1, :v2, :v3, :v4), Tuple{Int64, Float64, Int64, String}}
+    v = NT((3223,3.0,3,"EWFW"))
+    _writebuffermatfrostarray!(stream, v)
+    stream.available += 20
+    @test read_matfrostarray!(stream, NT).x.x == v
+    @test stream.available - stream.position == 20
+end
+
+@testset "Vector of NamedTuple" begin
+    _clearbuffer!(stream)
+    NT = NamedTuple{(:v1, :v2, :v3, :v4), Tuple{Int64, Float64, Int64, String}}
+    v1 = NT((3223,3.0,5,"12Test34"))
+    v2 = NT((544,632.0,23,"44Test44"))
+    v3 = NT((345,-6851.0,43,"1111"))
+
+    arr = NT[v1, v2, v3, v1, v3, v2]
+    _writebuffermatfrostarray!(stream, arr)
+    stream.available += 20
+    @test read_matfrostarray!(stream, Vector{NT}).x.x == arr
     @test stream.available - stream.position == 20
 end
 
