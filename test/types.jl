@@ -189,7 +189,7 @@ expected_matlab_type(::Type{Complex{Int32}})    = COMPLEX_INT32
 expected_matlab_type(::Type{Complex{UInt64}})   = COMPLEX_UINT64
 expected_matlab_type(::Type{Complex{Int64}})    = COMPLEX_INT64
 
-expected_matlab_type(::Type{Array{T, N}}) where {T <: Number, N} = expected_matlab_type(T)
+expected_matlab_type(::Type{Array{T, N}}) where {T <: Union{Number, String}, N} = expected_matlab_type(T)
 
 
 const PRIMITIVE_TYPES_AND_SIZE = (

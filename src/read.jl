@@ -49,7 +49,7 @@ function jldims(header::MATFrostArrayHeader, ::Val{N}) where N
 end
 
 
-@noinline function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T <: Union{Number, Array{<:Number}, String, Array{<:String}}}
+@noinline function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T <: Union{Number, Array{<:Number}, String, Array{String}}}
     result = read_and_validate_matfrostarray_header!(io, T).x
     
     if isa(result, Ok)
@@ -536,7 +536,7 @@ expected_matlab_type_name(::Type{Complex{Int32}})    = "complex int32"
 expected_matlab_type_name(::Type{Complex{UInt64}})   = "complex uint64"
 expected_matlab_type_name(::Type{Complex{Int64}})    = "complex int64"
 
-expected_matlab_type_name(::Type{Array{T, N}}) where {T <: Number, N} = expected_matlab_type_name(T)
+expected_matlab_type_name(::Type{Array{T, N}}) where {T <: Union{Number, String}, N} = expected_matlab_type_name(T)
 
 
 
@@ -572,7 +572,7 @@ expected_matlab_type(::Type{Complex{Int32}})    = COMPLEX_INT32
 expected_matlab_type(::Type{Complex{UInt64}})   = COMPLEX_UINT64
 expected_matlab_type(::Type{Complex{Int64}})    = COMPLEX_INT64
 
-expected_matlab_type(::Type{Array{T, N}}) where {T <: Number, N} = expected_matlab_type(T)
+expected_matlab_type(::Type{Array{T, N}}) where {T <: Union{Number, String}, N} = expected_matlab_type(T)
 
 
 const PRIMITIVE_TYPES_AND_SIZE = (

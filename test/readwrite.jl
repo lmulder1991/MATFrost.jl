@@ -1,5 +1,5 @@
 """
-Write buffer is a simple 
+Write to buffer in a unsafe manner
 """
 function _writebuffer!(io::BufferedStream, v::T) where T
     p = reinterpret(Ptr{T}, pointer(io.buffer) + io.available)
@@ -37,7 +37,7 @@ end
 
 function _writebuffermatfrostarray!(io::BufferedStream, arr::Array{T,N}) where {T <: Number,N}
     _writebuffer!(io, expected_matlab_type(Array{T,N}))
-    _writebuffer!(io, N)
+    _writebuffer!(io, Int64(N))
     dims = size(arr)
     for dim in dims
         _writebuffer!(io, dim)
@@ -51,7 +51,7 @@ end
 
 function _writebuffermatfrostarray!(io::BufferedStream, arr::Array{String,N}) where {N}
     _writebuffer!(io, expected_matlab_type(Array{String,N}))
-    _writebuffer!(io, N)
+    _writebuffer!(io, Int64(N))
     dims = size(arr)
     for dim in dims
         _writebuffer!(io, dim)
@@ -60,6 +60,34 @@ function _writebuffermatfrostarray!(io::BufferedStream, arr::Array{String,N}) wh
         _writebuffer!(io,s)
     end
 end
+
+function _writebuffermatfrostarray!(io::BufferedStream, arr::Array{T,N}) where {T,N}
+    _writebuffer!(io, expected_matlab_type(Array{T,N}))
+    _writebuffer!(io, Int64(N))
+    dims = size(arr)
+    for dim in dims
+        _writebuffer!(io, dim)
+    end
+    _writebuffer!(io, Int64(fieldcount(T)))
+    for fn in fieldnames(T)
+        _writebuffer!(io, String(fn))
+    end
+    for i in eachindex(arr)
+        el = arr[i]
+        for fn in fieldnames(T)
+            _writebuffermatfrostarray!(io, getfield(el, fn))
+        end
+
+    end
+
+end
+
+function _writebuffermatfrostarray!(io::BufferedStream, v::T) where {T}
+    _writebuffermatfrostarray!(io, T[v])
+  
+end
+
+
 
 
 function _readbuffer!(io::BufferedStream, ::Type{T}) where T

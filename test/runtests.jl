@@ -1,12 +1,12 @@
 
-using MATFrost: MATFrost,  _Stream.BufferedStream as BufferedStream, _Read.read_matfrostarray! as read_matfrostarray!
+using MATFrost: MATFrost,  _Stream.BufferedStream as BufferedStream, _Read.read_matfrostarray! as read_matfrostarray!, MATFrost._MATFrostException as MATFrostException
 using Test
 using JET
 
 include("types.jl")
 include("readwrite.jl")
 include("Primitives.jl")
-
+include("incompatible_datatypes.jl")
 stream = MATFrost._Stream.BufferedStream(C_NULL, Vector{UInt8}(undef, 2 << 16), 0, 0)
 
 
