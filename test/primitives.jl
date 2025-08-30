@@ -32,6 +32,15 @@ primitive_tests = (
         @test stream.available - stream.position == 20
     end
 
+    @testset "Read-ComplexScalar" begin
+        _clearbuffer!(stream)
+        v = Complex{pt[1]}(pt[2], pt[1](2) * pt[2])
+        _writebuffermatfrostarray!(stream, v)
+        stream.available += 20
+        @test read_matfrostarray!(stream, Complex{pt[1]}).x.x == v
+        @test stream.available - stream.position == 20
+    end
+
     @testset "Read-Vector" begin
         _clearbuffer!(stream)
         arr = pt[1][pt[2], pt[2]+1, pt[2]+2]
@@ -42,6 +51,15 @@ primitive_tests = (
         
     end
 
+    @testset "Read-ComplexVector" begin
+        _clearbuffer!(stream)
+        v = Complex{pt[1]}(pt[2], pt[1](2) * pt[2])
+        arr= Complex{pt[1]}[v + 1, v+2, v+3]
+        _writebuffermatfrostarray!(stream, arr)
+        stream.available += 20
+        @test read_matfrostarray!(stream, Vector{Complex{pt[1]}}).x.x == arr
+        @test stream.available - stream.position == 20
+    end
 
     @testset "Read-Matrix" begin
         _clearbuffer!(stream)

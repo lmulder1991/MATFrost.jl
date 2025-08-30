@@ -9,25 +9,6 @@ include("Primitives.jl")
 
 stream = MATFrost._Stream.BufferedStream(C_NULL, Vector{UInt8}(undef, 2 << 16), 0, 0)
 
-_writebuffer!(stream, MATFrost._Read.INT64)
-_writebuffer!(stream, 2)
-_writebuffer!(stream, 1)
-_writebuffer!(stream, 1)
-_writebuffer!(stream, 4321)
-
-@test read_matfrostarray!(stream, Int64).x.x == 4321
-# @test_opt read_matfrostarray!(stream, Int64)
-
-
-_clearbuffer!(stream)
-_writebuffer!(stream, MATFrost._Read.INT64)
-_writebuffer!(stream, 2)
-_writebuffer!(stream, 4)
-_writebuffer!(stream, 3)
-foreach(i -> _writebuffer!(stream, i), 1:12)
-
-@test read_matfrostarray!(stream, Matrix{Int64}).x.x == collect(reshape(1:12, (4,3))) 
-
 
 struct TestStruct1
     a::Float64
