@@ -23,9 +23,7 @@ include("stream.jl")
 
 include("read.jl")
 include("write.jl")
-include("juliacall.jl")
 include("install.jl")
-include("mex.jl")
 
 using ._Stream
 
