@@ -22,7 +22,7 @@ end
 include("stream.jl")
 
 include("read.jl")
-include("converttomatlab.jl")
+include("write.jl")
 include("juliacall.jl")
 include("install.jl")
 include("mex.jl")
@@ -79,9 +79,9 @@ function serve(h_stdin::Ptr{Cvoid}, h_stdout::Ptr{Cvoid})
         # arr = _ConvertToJulia.read_matlab!(in_buf, Vector{Int32})
             arr = _Read.read_matfrostarray!(in_buf, Vector{StructTestNest})
 
-            _ConvertToMATLAB.write_matlab!(out_buf, arr)
+            _Write.write_matlab!(out_buf, arr)
         catch e
-            _ConvertToMATLAB.write_matlab!(out_buf, string(e))
+            _Write.write_matlab!(out_buf, string(e))
         end
         _Stream.flush!(out_buf)
         # t = _Stream.read!(in_buf, Int32)

@@ -1,47 +1,9 @@
 
-module _ConvertToMATLAB
+module _Write
 
-using ..MATFrost: _MATFrostArray as MATFrostArray
 
 import ..MATFrost._Stream: read!, write!, flush!, BufferedStream
 
-mutable struct MATFrostArrayMemory{N, T, Nf}
-    matfrostarray::MATFrostArray
-    dims::NTuple{N, Csize_t}
-    data::T
-    fieldnames::NTuple{Nf, Cstring}
-
-    function MATFrostArrayMemory{N, T, Nf}(type::Cint, dims::NTuple{N, Csize_t}, data::T, fieldnames::NTuple{Nf, Cstring}) where {N, T, Nf}
-        mfam = new()
-        mfam.dims = dims
-        mfam.data = data
-        mfam.fieldnames = fieldnames
-        mfam.matfrostarray = MATFrostArray(
-            type,
-            N,
-            pointer_from_objref(mfam) + fieldoffset(MATFrostArrayMemory{N, T, Nf}, 2),
-            pointer_from_objref(mfam) + fieldoffset(MATFrostArrayMemory{N, T, Nf}, 3),
-            Nf,
-            pointer_from_objref(mfam) + fieldoffset(MATFrostArrayMemory{N, T, Nf}, 4)
-        )
-        mfam
-    end
-    function MATFrostArrayMemory{N, T, Nf}(type::Cint, dims::NTuple{N, Csize_t}, data::T, dataptr::Ptr{Cvoid}, fieldnames::NTuple{Nf, Cstring}) where {N, T, Nf}
-        mfam = new()
-        mfam.dims = dims
-        mfam.data = data
-        mfam.fieldnames = fieldnames
-        mfam.matfrostarray = MATFrostArray(
-            type, 
-            N, 
-            pointer_from_objref(mfam) + fieldoffset(MATFrostArrayMemory{N, T, Nf}, 2),
-            dataptr,
-            Nf,
-            pointer_from_objref(mfam) + fieldoffset(MATFrostArrayMemory{N, T, Nf}, 4)
-        )
-        mfam
-    end
-end
 
 
 const LOGICAL = Int32(0)
@@ -85,7 +47,6 @@ const SPARSE_LOGICAL = Int32(29)
 const SPARSE_DOUBLE = Int32(30)
 const SPARSE_COMPLEX_DOUBLE = Int32(31)
 
-const MFA_NULL = MATFrostArray(0, 0, 0, 0, 0, 0)
 
 array_type(::Type{Bool}) = LOGICAL
 
