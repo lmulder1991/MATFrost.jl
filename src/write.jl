@@ -77,7 +77,7 @@ array_type(::Type{Complex{Int64}})  = COMPLEX_INT64
 array_type(::Type{Complex{UInt64}}) = COMPLEX_UINT64
 
 
-function write_matlab!(io::BufferedStream, v::T) where{T <: Number}
+function write_matfrostarray!(io::BufferedStream, v::T) where{T <: Union{Number, String}}
     write!(io, array_type(T))
     write!(io, Int64(1))
     write!(io, Int64(1))
@@ -85,7 +85,7 @@ function write_matlab!(io::BufferedStream, v::T) where{T <: Number}
     nothing
 end
 
-function write_matlab!(io::BufferedStream, arr::Array{T,N}) where{N, T <: Number}
+function write_matfrostarray!(io::BufferedStream, arr::Array{T,N}) where{N, T <: Number}
     write!(io, array_type(T))
     write!(io, Int64(N))
     for i in 1:N
@@ -96,94 +96,74 @@ function write_matlab!(io::BufferedStream, arr::Array{T,N}) where{N, T <: Number
 end
 
 
-function write_matlab!(io::BufferedStream, s::String)
-    write!(io, MATLAB_STRING)
-    write!(io, Int64(1))
-    write!(io, Int64(1))
 
-    write!(io, Int64(ncodeunits(s)))
-    write!(io, pointer(s), Int64(ncodeunits(s)))
-    nothing
-end
-
-function write_matlab!(io::BufferedStream, arr::Array{String,N}) where{N}
+function write_matfrostarray!(io::BufferedStream, arr::Array{String,N}) where{N}
     write!(io, MATLAB_STRING)
     write!(io, Int64(N))
     for i in 1:N
         write!(io, Int64(size(arr, i)))
     end
     for s in arr
-        write!(io, Int64(ncodeunits(s)))
-        write!(io, pointer(s), Int64(ncodeunits(s)))
+        write!(io, s)
     end
     nothing
 end
 
-function write_matlab!(io::BufferedStream, structval::T) where {T}
-    write!(io, STRUCT)
-    write!(io, Int64(1)) # ndims
-    write!(io, Int64(1)) # size dim1
+@generated function write_matfrostarray!(io::BufferedStream, structval::T) where {T}
+    quote
+        write!(io, STRUCT)
+        write!(io, Int64(1)) # ndims
+        write!(io, Int64(1)) # size dim1
 
-    write!(io, Int64(length(fieldnames(T)))) # numfields
-    
-    for fieldname in fieldnames(T)
-        fns = string(fieldname)
-        write!(io, Int64(ncodeunits(fns)))
-        write!(io, pointer(fns), Int64(ncodeunits(fns)))
-    end
-
-    for fieldname in fieldnames(T)
-        write_matlab!(io, getfield(structval, fieldname))
-    end
-    nothing
-end
-
-function write_matlab!(io::BufferedStream, arr::Array{T,N}) where {T,N}
-    write!(io, STRUCT)
-    write!(io, Int64(N)) # ndims
-    for i in 1:N
-        write!(io, Int64(size(arr, i)))
-    end
-
-    write!(io, Int64(length(fieldnames(T)))) # numfields
-    for fieldname in fieldnames(T)
-        fns = string(fieldname)
-        write!(io, Int64(ncodeunits(fns)))
-        write!(io, pointer(fns), Int64(ncodeunits(fns)))
-    end
-
-    for el in arr
-        for fieldname in fieldnames(T)
-            write_matlab!(io, getfield(el, fieldname))
+        write!(io, Int64(fieldcount(T))) # numfields
+        for fn in fieldnames(T)
+            write!(io, String(fn))
         end
+
+        $((
+            :(write_matfrostarray!(io, structval.$fn))
+            for fn in fieldnames(T)
+        )...)
+        nothing
     end
-    nothing
+end
+
+@generated function write_matfrostarray!(io::BufferedStream, arr::Array{T,N}) where {T,N}
+    quote
+        write!(io, STRUCT)
+        write!(io, Int64(N)) # ndims
+        for i in 1:N
+            write!(io, Int64(size(arr, i)))
+        end
+
+        write!(io, Int64(fieldcount(T))) # numfields
+        for fn in fieldnames(T)
+            write!(io, String(fn))
+        end
+
+        for el in arr
+            $((
+                :(write_matfrostarray!(io, el.$fn))
+                for fn in fieldnames(T)
+            )...)
+        end
+        nothing
+    end
 end
 
 
-function write_matlab!(io::BufferedStream, tup::T) where {T<:Tuple}
-    write!(io, CELL)
-    write!(io, Int64(1)) # ndims
-    write!(io, Int64(length(tup))) # size dim1
+@generated function write_matfrostarray!(io::BufferedStream, tup::T) where {T<:Tuple}
+    quote 
+        write!(io, CELL)
+        write!(io, Int64(1)) # ndims
+        write!(io, Int64(length(tup))) # size dim1
 
-    for el in tup
-        write_matlab!(io, el)
+        for el in tup
+            write_matfrostarray!(io, el)
+        end
+        nothing
     end
-    nothing
 end
 
-# function write_matlab!(io::BufferedStream, t::T) where {T <: Tuple}
-#     write!(io, CELL)
-#     write!(io, Int64(length(fieldnames(T)))) # ndims
-#     for i in 1:N
-#         write!(io, Int64(size(arr, i)))
-#     end
-
-#     for el in arr
-#         write_matlab!(io, el)
-#     end
-
-#     nothing
-# end
 
 end

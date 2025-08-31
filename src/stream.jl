@@ -81,6 +81,11 @@ function write!(io::BufferedStream, arr::Array{T}) where {T<:Number}
 end
 
 
+function write!(io::BufferedStream, v::String)
+    nb = ncodeunits(v)
+    write!(io, Int64(nb))
+    write!(io, pointer(v), nb)
+end
 
 
 function read!(io::BufferedStream, data::Ptr{UInt8}, nb::Int64)

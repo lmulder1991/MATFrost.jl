@@ -2,17 +2,11 @@ module MATFrost
 using Artifacts
 using TOML
 
+
+
 function _read! end
 function _write! end
 
-struct _MATFrostArray
-    type::Cint
-    ndims::Csize_t
-    dims::Ptr{Csize_t}
-    data::Ptr{Cvoid}
-    nfields::Csize_t
-    fieldnames::Ptr{Cstring}
-end
 
 struct _MATFrostException <: Exception 
     id::String
@@ -24,6 +18,8 @@ include("stream.jl")
 include("read.jl")
 include("write.jl")
 include("install.jl")
+include("register.jl")
+
 
 using ._Stream
 
@@ -77,9 +73,9 @@ function serve(h_stdin::Ptr{Cvoid}, h_stdout::Ptr{Cvoid})
         # arr = _ConvertToJulia.read_matlab!(in_buf, Vector{Int32})
             arr = _Read.read_matfrostarray!(in_buf, Vector{StructTestNest})
 
-            _Write.write_matlab!(out_buf, arr)
+            _Write.write_matfrostarray!(out_buf, arr)
         catch e
-            _Write.write_matlab!(out_buf, string(e))
+            _Write.write_matfrostarray!(out_buf, string(e))
         end
         _Stream.flush!(out_buf)
         # t = _Stream.read!(in_buf, Int32)
