@@ -51,7 +51,6 @@ end
 
 @noinline function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T <: Union{Number, Array{<:Number}, String, Array{String}}}
     result = read_and_validate_matfrostarray_header!(io, T).x
-    
     if isa(result, Ok)
         read_matfrostarray!(io, T, result.x)
     else
@@ -156,23 +155,23 @@ end
 Read scalar struct object from MATFrostArray
 """
 @generated function read_matfrostarray!(io::BufferedStream, ::Type{T}, header::MATFrostArrayHeader) where {T}
-    if isabstracttype(T)
+    if !isstructtype(T)
         return quote
-            discard_matfrostarray!(io)
-            MATFrostResult{T}(MATFrostException("Abstract types not supported!", ""))
+            discard_matfrostarray_body!(io, header)
+            MATFrostResult{T}(MATFrostException("", "Type not supported $(_typename(T))"))
         end
     end
 
     return quote
 
-        result = read_and_validate_matrfrostarray_struct_header!(io, fieldnames(T), header).x
+        result = (@noinline read_and_validate_matrfrostarray_struct_header!(io, fieldnames(T), header)).x
         if result isa Err
             return MATFrostResult{T}(result.x)
         end
         fieldnames_mat = result.x
 
 
-        read_matfrostarray_struct_object!(io, fieldnames_mat, T)
+        @noinline read_matfrostarray_struct_object!(io, fieldnames_mat, T)
 
     end
 
@@ -182,10 +181,10 @@ end
 Read array of struct objects from MATFrostArray
 """
 @generated function read_matfrostarray!(io::BufferedStream, ::Type{Array{T,N}}, header::MATFrostArrayHeader) where {T,N}
-    if isabstracttype(T)
+    if !isstructtype(T)
         return quote
-            discard_matfrostarray!(io)
-            MATFrostResult{Array{T,N}}(MATFrostException("Abstract types not supported!", ""))
+            discard_matfrostarray!(io, header)
+            MATFrostResult{Array{T,N}}(MATFrostException("", "Type not supported $(_typename(Array{T,N}))"))
         end
     end
 
@@ -201,7 +200,7 @@ Read array of struct objects from MATFrostArray
             return MATFrostResult{Array{T,N}}(Array{T,N}(undef, dims))
         end
         
-        result = read_and_validate_matrfrostarray_struct_header!(io, fieldnames(T), header).x
+        result = (@noinline read_and_validate_matrfrostarray_struct_header!(io, fieldnames(T), header)).x
         if result isa Err
             return MATFrostResult{Array{T,N}}(result.x)
         end
@@ -211,7 +210,7 @@ Read array of struct objects from MATFrostArray
         arr = Array{T,N}(undef, dims)
         
         for eli in eachindex(arr)
-            result = read_matfrostarray_struct_object!(io, fieldnames_mat, T).x
+            result = (@noinline read_matfrostarray_struct_object!(io, fieldnames_mat, T)).x
             if result isa Ok
                 arr[eli] = result.x
             else
@@ -227,7 +226,7 @@ end
 
 
 
-function read_and_validate_matrfrostarray_struct_header!(io::BufferedStream, expected_fieldnames::NTuple{N, Symbol}, header::MATFrostArrayHeader) where {N}
+@noinline function read_and_validate_matrfrostarray_struct_header!(io::BufferedStream, expected_fieldnames::NTuple{N, Symbol}, header::MATFrostArrayHeader) where {N}
     nel = prod(header.dims; init=1)
 
     numfields_mat = read!(io, Int64)
@@ -680,31 +679,7 @@ function read_matfrostarray_header3!(io::BufferedStream) :: MATFrostArrayHeader
     dims = Int64[read!(io, Int64) for _ in 1:ndims]
 
     MATFrostArrayHeader(type, dims)
-    
-    # dims1 = ntuple(Val{N}()) do i
-    #     if i <= ndims
-    #         return read!(io, Int64)
-    #     else
-    #         return 1
-    #     end
-    # end
 
-    # dims2 = ntuple(Val{4}()) do i
-    #     if (i+N) <= ndims
-    #         return read!(io, Int64)
-    #     else
-    #         return 1
-    #     end
-    # end
-    
-    # nel = prod(dims1; init=1)*prod(dims2)
-
-    # for _ in (N+4+1):ndims
-    #     dim = read!(io, Int64)
-    #     nel *= dim
-    # end
-
-    # MATFrostArrayHeader{N}(type, ndims, nel, dims1, dims2)
 end
 
 """
