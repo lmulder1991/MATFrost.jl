@@ -1,11 +1,13 @@
 module _Register
-"""
-    @matfrost function factorize(x::Float64, y::Vector{Float64})
 
+"""
+    @matfrost function product_long(x::Float64, y::Vector{Float64})
+        x*y
     end
 
+    @matfrost product_short(x::Float64, y::Int64) = x*y
 
-    @matfrostserver
+
 """
 macro matfrost(func)
 

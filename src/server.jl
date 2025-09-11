@@ -5,7 +5,16 @@ struct CallStruct
     bindir::String
     project::String
     evaluate::String
+end
 
+
+
+
+struct ActionStruct
+    functionname::String
+    bindir::String
+    project::String
+    evaluate::String
 end
 
 
