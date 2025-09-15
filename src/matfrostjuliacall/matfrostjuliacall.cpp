@@ -67,6 +67,36 @@ public:
         }
         else if (action == u"CALL") {
 
+            if (julia_processes.find(id) == julia_processes.end()) {
+
+            } else {
+
+                JuliaProcess& jp = *julia_processes[id].get();
+
+                const matlab::data::StringArray fully_qualified_name = static_cast<const matlab::data::StringArray>(input["fully_qualified_name"]);
+                const matlab::data::CellArray args = static_cast<const matlab::data::CellArray>(input["args"]);
+
+                matlab::data::ArrayFactory factory;
+
+
+                matlab::data::StructArray callmeta = factory.createStructArray({1}, {"fully_qualified_name"});
+                callmeta[0]["fully_qualified_name"] = fully_qualified_name;
+
+                matlab::data::CellArray callstruct = factory.createCellArray({2});
+                callstruct[0] = callmeta;
+                callstruct[1] = args;
+
+
+                MATFrost::ConvertToJulia::write(callstruct, jp.outputstream);
+
+                outputs[0] = MATFrost::ConvertToMATLAB::read(jp.inputstream);
+
+
+            }
+
+
+
+
         }
 
 
