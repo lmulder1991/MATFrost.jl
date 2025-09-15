@@ -9,6 +9,7 @@
 #include <strsafe.h>
 
 
+
 #include <string>
 #include <iostream>
 #include <array>
@@ -156,35 +157,35 @@ public:
     }
 
 
-    ~JuliaProcess() {
-        // Close handles to the child process and its primary thread.
-        // Some applications might keep these handles to monitor the status
-        // of the child process, for example.
-        TerminateProcess(process_information.hProcess, 0);
-
-        WaitForSingleObject(process_information.hProcess, 500);
-
-        CloseHandle(process_information.hProcess);
-        CloseHandle(process_information.hThread);
-
-        // Close handles to the stdin and stdout pipes no longer needed by the child process.
-        // If they are not explicitly closed, there is no way to recognize that the child process has ended.
-        //
-
-    }
-
-
-
+    // ~JuliaProcess() {
+    //     // Close handles to the child process and its primary thread.
+    //     // Some applications might keep these handles to monitor the status
+    //     // of the child process, for example.
+    //     TerminateProcess(process_information.hProcess, 0);
+    //
+    //     WaitForSingleObject(process_information.hProcess, 500);
+    //
+    //     CloseHandle(process_information.hProcess);
+    //     CloseHandle(process_information.hThread);
+    //
+    //     // Close handles to the stdin and stdout pipes no longer needed by the child process.
+    //     // If they are not explicitly closed, there is no way to recognize that the child process has ended.
+    //     //
+    //
+    // }
+    //
 
 
 
-    static JuliaProcess spawn(const std::string& bin, const std::string& project) {
+
+
+    static JuliaProcess spawn(const std::string& cmdline) {
         // TCHAR szCmdline[]=TEXT("C:\\Users\\jbelier\\.julia\\juliaup\\julia-1.12.0-rc1+0.x64.w64.mingw32\\bin\\julia.exe -e \"println(read(stdin, Int64))\"");
 
 
         SECURITY_ATTRIBUTES saAttr;
 
-        printf("\n->Start of parent execution.\n");
+        // printf("\n->Start of parent execution.\n");
 
         // Set the bInheritHandle flag so pipe handles are inherited.
 
@@ -218,10 +219,10 @@ public:
             // ErrorExit(TEXT("Stdout SetHandleInformation"));
         }
 
-        std::cout << "HANDLE stdin.Read: " << h_stdin[0] << " stdin.Write:" << h_stdin[1] << std::endl;
-
-        std::string cmdline = "\"" + bin + "\" --project=\"" + project + "\" -e \"using MATFrost ; MATFrost.serve(" +
-            std::to_string((long long) h_stdin[0]) + ", "+ std::to_string((long long) h_stdout[1]) +")\"";//read(stdin, Int64))\"";
+        // std::cout << "HANDLE stdin.Read: " << h_stdin[0] << " stdin.Write:" << h_stdin[1] << std::endl;
+        //
+        std::string cmdline_pipes = cmdline + " " +
+            std::to_string((long long) h_stdin[0]) + " " + std::to_string((long long) h_stdout[1]);
 
 
 
@@ -235,16 +236,16 @@ public:
 
 
         siStartInfo.cb = sizeof(STARTUPINFO);
-        // siStartInfo.hStdInput  = h_stdin[0];
-        // siStartInfo.hStdOutput = h_stdout[1];
+        siStartInfo.hStdInput = h_stdin[0];
+        siStartInfo.hStdOutput = h_stdout[1];
         siStartInfo.hStdError  = h_stderr[1];
         siStartInfo.dwFlags |= STARTF_USESTDHANDLES;
 
         // Create the child process.
 
         CreateProcessA(
-          bin.c_str(),
-          &cmdline[0],   // command line
+          nullptr,
+          &cmdline_pipes[0],   // command line
           nullptr,       // process security attributes
           nullptr,       // primary thread security attributes
           TRUE,          // handles are inherited
@@ -261,7 +262,7 @@ public:
 
 
 
-        const JuliaProcess jp(
+        JuliaProcess jp(
             h_stdout[0],
             h_stderr[0],
             h_stdin[1], piProcInfo);
