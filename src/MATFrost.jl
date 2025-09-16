@@ -1,11 +1,15 @@
 module MATFrost
+
+export @matfrostserve 
+
 using Artifacts
 using TOML
 
 
-
 function _read! end
 function _write! end
+
+macro matfrostserve end
 
 
 struct _MATFrostException <: Exception 
@@ -19,6 +23,8 @@ include("read.jl")
 include("write.jl")
 include("install.jl")
 include("register.jl")
+
+include("server.jl")
 
 
 using ._Stream

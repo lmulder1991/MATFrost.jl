@@ -99,21 +99,37 @@ public:
 
     }
 
-    static matlab::data::Array juliacall(std::shared_ptr<JuliaProcess> jp, const matlab::data::Array callstruct) {
-
+    matlab::data::Array juliacall(std::shared_ptr<JuliaProcess> jp, const matlab::data::Array callstruct) {
         matlab::data::ArrayFactory factory;
+        std::shared_ptr<matlab::engine::MATLABEngine> matlabPtr = getEngine();
+        matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
+                  ({ factory.createScalar(("###################################\nStarting\n###################################\n"))}));
+
 
         if (!jp->callable()) {
             return factory.createScalar(-1);
         }
 
+        matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
+                  ({ factory.createScalar(("###################################\ncallable\n###################################\n"))}));
+
         MATFrost::ConvertToJulia::write(callstruct, jp->outputstream);
+        jp->outputstream.flush();
+
+        matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
+          ({ factory.createScalar(("###################################\nwritten\n###################################\n"))}));
 
         while (!jp->inputstream.available()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
 
+        matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
+          ({ factory.createScalar(("###################################\nreading\n###################################\n"))}));
+
         return MATFrost::ConvertToMATLAB::read(jp->inputstream);
+
+        matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
+  ({ factory.createScalar(("###################################\nread\n###################################\n"))}));
     }
 
 

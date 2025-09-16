@@ -50,7 +50,7 @@ const SPARSE_COMPLEX_DOUBLE = Int32(31)
 
 array_type(::Type{Bool}) = LOGICAL
 
-
+array_type(::Type{String}) = MATLAB_STRING
 
 array_type(::Type{Float64}) = DOUBLE
 array_type(::Type{Float32}) = SINGLE
@@ -75,6 +75,15 @@ array_type(::Type{Complex{Int32}})  = COMPLEX_INT32
 array_type(::Type{Complex{UInt32}}) = COMPLEX_UINT32
 array_type(::Type{Complex{Int64}})  = COMPLEX_INT64
 array_type(::Type{Complex{UInt64}}) = COMPLEX_UINT64
+
+
+array_type(::Type{<:Tuple}) = CELL
+
+array_type(::Type{Array{T}}) where {T<:Union{Number, String}} = array_type(T)
+
+array_type(::Type{Array{<:Array}}) = CELL
+
+array_type(::Type{T}) where T = STRUCT
 
 
 function write_matfrostarray!(io::BufferedStream, v::T) where{T <: Union{Number, String}}
