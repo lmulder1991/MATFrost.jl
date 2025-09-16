@@ -63,9 +63,13 @@ public:
             }
         }
         else if (action == u"DESTROY") {
-
+            if (julia_processes.find(id) != julia_processes.end()) {
+                julia_processes.erase(id);
+            }
         }
         else if (action == u"CALL") {
+            const matlab::data::StringArray fully_qualified_name = input["fully_qualified_name"];
+            const matlab::data::CellArray args = input["args"];
 
             if (julia_processes.find(id) == julia_processes.end()) {
 
@@ -73,8 +77,6 @@ public:
 
                 std::shared_ptr<JuliaProcess> jp = julia_processes[id];
 
-                const matlab::data::StringArray fully_qualified_name = input["fully_qualified_name"];
-                const matlab::data::CellArray args = input["args"];
 
                 matlab::data::ArrayFactory factory;
 
