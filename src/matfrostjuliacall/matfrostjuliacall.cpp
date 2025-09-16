@@ -51,7 +51,7 @@ public:
 
         const matlab::data::Struct input = static_cast<const matlab::data::StructArray>(inputs[0])[0];
 
-        uint64_t id = static_cast<const matlab::data::TypedArray<uint64_t>>(input["id"])[0];
+        const uint64_t id = static_cast<const matlab::data::TypedArray<uint64_t>>(input["id"])[0];
         const std::u16string action = static_cast<const matlab::data::StringArray>(input["action"])[0];
 
         if (action == u"CREATE") {
@@ -59,7 +59,7 @@ public:
 
             if (julia_processes.find(id) == julia_processes.end()) {
 
-                julia_processes[id] = std::make_shared<JuliaProcess>(JuliaProcess::spawn(cmdline));
+                julia_processes[id] = JuliaProcess::spawn(cmdline);
             }
         }
         else if (action == u"DESTROY") {
@@ -71,10 +71,10 @@ public:
 
             } else {
 
-                JuliaProcess& jp = *julia_processes[id].get();
+                std::shared_ptr<JuliaProcess> jp = julia_processes[id];
 
-                const matlab::data::StringArray fully_qualified_name = static_cast<const matlab::data::StringArray>(input["fully_qualified_name"]);
-                const matlab::data::CellArray args = static_cast<const matlab::data::CellArray>(input["args"]);
+                const matlab::data::StringArray fully_qualified_name = input["fully_qualified_name"];
+                const matlab::data::CellArray args = input["args"];
 
                 matlab::data::ArrayFactory factory;
 
@@ -86,10 +86,7 @@ public:
                 callstruct[0] = callmeta;
                 callstruct[1] = args;
 
-
-                MATFrost::ConvertToJulia::write(callstruct, jp.outputstream);
-
-                outputs[0] = MATFrost::ConvertToMATLAB::read(jp.inputstream);
+                outputs[0] = juliacall(jp, callstruct);
 
 
             }
@@ -100,6 +97,23 @@ public:
         }
 
 
+    }
+
+    static matlab::data::Array juliacall(std::shared_ptr<JuliaProcess> jp, const matlab::data::Array callstruct) {
+
+        matlab::data::ArrayFactory factory;
+
+        if (!jp->callable()) {
+            return factory.createScalar(-1);
+        }
+
+        MATFrost::ConvertToJulia::write(callstruct, jp->outputstream);
+
+        while (!jp->inputstream.available()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+
+        return MATFrost::ConvertToMATLAB::read(jp->inputstream);
     }
 
 
