@@ -1,3 +1,7 @@
+"""
+This bootstrap script starts the matfrostserver and is supposed to while spwaning the Julia process.
+"""
+
 try
     using MATFrost
 catch _
