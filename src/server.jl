@@ -50,6 +50,11 @@ function getfunction(meta::CallMeta)
 end
 
 
+function callsequence()
+
+end
+
+
 function matfrostserve(matfrostin::Ptr{Cvoid}, matfrostout::Ptr{Cvoid})
     in_buf = BufferedStream(matfrostin, Vector{UInt8}(undef, 2<<13), 0, 0)
     out_buf  = BufferedStream(matfrostout, Vector{UInt8}(undef, 2<<13), 0, 0)
