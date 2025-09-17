@@ -310,7 +310,7 @@ end
 
 function read_and_validate_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: MATFrostResult{MATFrostArrayHeader} where {T}
 
-    header = read_matfrostarray_header3!(io)
+    header = read_matfrostarray_header!(io)
 
     expected_type = expected_matlab_type(T)
     nel = prod(header.dims; init=1)
@@ -326,7 +326,7 @@ end
 
 
 function read_and_validate_matfrostarray_header!(io::BufferedStream, ::Type{Array{T,N}}) :: MATFrostResult{MATFrostArrayHeader} where {T,N}
-    header = read_matfrostarray_header3!(io)
+    header = read_matfrostarray_header!(io)
 
     expected_type = expected_matlab_type(Array{T,N})
     
@@ -362,7 +362,7 @@ end
 
 
 function read_and_validate_matfrostarray_header!(io::BufferedStream, ::Type{T}) where {T<:Tuple}
-    header = read_matfrostarray_header3!(io)
+    header = read_matfrostarray_header!(io)
     
     expected_type = expected_matlab_type(T)
 
@@ -671,7 +671,7 @@ function discard_matfrostarray_body!(io::BufferedStream, header::MATFrostArrayHe
 end
 
 
-function read_matfrostarray_header3!(io::BufferedStream) :: MATFrostArrayHeader
+function read_matfrostarray_header!(io::BufferedStream) :: MATFrostArrayHeader
     type = read!(io, Int32)
    
     ndims = read!(io, Int64)
@@ -899,23 +899,23 @@ function validate_matfrostarray_type_and_size(io::BufferedStream, ::Type{T}, hea
 end
 
 
-function read_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: Tuple{} where {T}
+# function read_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: Tuple{} where {T}
 
-    header = read_matfrostarray_header3!(io)
+#     header = read_matfrostarray_header3!(io)
 
-    expected_type = expected_matlab_type(T)
-    nel = prod(header.dims; init=1)
-    if (nel != 1)
-        discard_matfrostarray_body!(io, header)
-        throw(not_scalar_value_exception(T, header.dims))
-    elseif (header.type != expected_type)
-        discard_matfrostarray_body!(io, header)
-        throw(incompatible_datatypes_exception(T, header.type))
-    end
+#     expected_type = expected_matlab_type(T)
+#     nel = prod(header.dims; init=1)
+#     if (nel != 1)
+#         discard_matfrostarray_body!(io, header)
+#         throw(not_scalar_value_exception(T, header.dims))
+#     elseif (header.type != expected_type)
+#         discard_matfrostarray_body!(io, header)
+#         throw(incompatible_datatypes_exception(T, header.type))
+#     end
 
 
-    return ()
-end
+#     return ()
+# end
 # function read_matfrostarray_header2!(io::BufferedStream, ::Type{T})
 
 # end
