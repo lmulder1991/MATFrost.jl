@@ -312,7 +312,7 @@ function read_and_validate_matfrostarray_header!(io::BufferedStream, ::Type{T}) 
 
     header = read_matfrostarray_header!(io)
 
-    expected_type = expected_matlab_type(T)
+    expected_type = mapped_matlab_type(T)
     nel = prod(header.dims; init=1)
     if (nel != 1)
         discard_matfrostarray_body!(io, header)
@@ -328,7 +328,7 @@ end
 function read_and_validate_matfrostarray_header!(io::BufferedStream, ::Type{Array{T,N}}) :: MATFrostResult{MATFrostArrayHeader} where {T,N}
     header = read_matfrostarray_header!(io)
 
-    expected_type = expected_matlab_type(Array{T,N})
+    expected_type = mapped_matlab_type(Array{T,N})
     
     nel = prod(header.dims; init=1)
 
@@ -364,7 +364,7 @@ end
 function read_and_validate_matfrostarray_header!(io::BufferedStream, ::Type{T}) where {T<:Tuple}
     header = read_matfrostarray_header!(io)
     
-    expected_type = expected_matlab_type(T)
+    expected_type = mapped_matlab_type(T)
 
     nel = prod(header.dims; init=1)
 
@@ -383,80 +383,7 @@ end
 
 
 
-function array_type_name(type::Int32)
-    if type == LOGICAL
-        "logical"
 
-    elseif type == CHAR
-        "char"
-    elseif type == MATLAB_STRING
-        "string"
-
-    elseif type == SINGLE
-        "single"
-    elseif type == DOUBLE
-        "double"
-
-    elseif type == INT8
-        "int8"
-    elseif type == UINT8
-        "uint8"
-    elseif type == INT16
-        "int16"
-    elseif type == UINT16
-        "uint16"
-    elseif type == INT32
-        "int32"
-    elseif type == UINT32
-        "uint32"
-    elseif type == INT64
-        "int64"
-    elseif type == UINT64
-        "uint64"
-
-    elseif type == COMPLEX_SINGLE
-        "complex single"
-    elseif type == COMPLEX_DOUBLE
-        "complex double"
-
-    elseif type == COMPLEX_INT8
-        "complex int8"
-    elseif type == COMPLEX_UINT8
-        "complex uint8"
-    elseif type == COMPLEX_INT16
-        "complex int16"
-    elseif type == COMPLEX_UINT16
-        "complex uint16"
-    elseif type == COMPLEX_INT32
-        "complex int32"
-    elseif type == COMPLEX_UINT32
-        "complex uint32"
-    elseif type == COMPLEX_INT64
-        "complex int64"
-    elseif type == COMPLEX_UINT64
-        "complex uint64"
-
-    elseif type == CELL
-        "cell"
-    elseif type == STRUCT
-        "struct"
-        
-    elseif type == OBJECT
-        "object"
-    elseif type == VALUE_OBJECT
-        "value object"
-    elseif type == HANDLE_OBJECT_REF
-        "handle object ref"
-    elseif type == SPARSE_LOGICAL
-        "sparse logical"
-    elseif type == SPARSE_DOUBLE
-        "sparse double"
-    elseif type == SPARSE_COMPLEX_DOUBLE
-        "sparse complex double"
-    else
-        "unknown"
-    end
-end
 
 expected_matlab_type_name(::Type{T}) where {T} = "struct"
 
@@ -493,39 +420,6 @@ expected_matlab_type_name(::Type{Array{T, N}}) where {T <: Union{Number, String}
 
 
 
-
-expected_matlab_type(::Type{T}) where {T} = STRUCT
-
-expected_matlab_type(::Type{T}) where {T<:Tuple} = CELL
-expected_matlab_type(::Type{T}) where {T<:Array{<:Union{Array,Tuple}}} = CELL
-
-expected_matlab_type(::Type{String}) = MATLAB_STRING
-
-expected_matlab_type(::Type{Float32}) = SINGLE
-expected_matlab_type(::Type{Float64}) = DOUBLE
-
-expected_matlab_type(::Type{UInt8})   = UINT8
-expected_matlab_type(::Type{Int8})    = INT8
-expected_matlab_type(::Type{UInt16})   = UINT16
-expected_matlab_type(::Type{Int16})    = INT16
-expected_matlab_type(::Type{UInt32})   = UINT32
-expected_matlab_type(::Type{Int32})    = INT32
-expected_matlab_type(::Type{UInt64})   = UINT64
-expected_matlab_type(::Type{Int64})    = INT64
-
-expected_matlab_type(::Type{Complex{Float32}}) = COMPLEX_SINGLE
-expected_matlab_type(::Type{Complex{Float64}}) = COMPLEX_DOUBLE
-
-expected_matlab_type(::Type{Complex{UInt8}})   = COMPLEX_UINT8
-expected_matlab_type(::Type{Complex{Int8}})    = COMPLEX_INT8
-expected_matlab_type(::Type{Complex{UInt16}})   = COMPLEX_UINT16
-expected_matlab_type(::Type{Complex{Int16}})    = COMPLEX_INT16
-expected_matlab_type(::Type{Complex{UInt32}})   = COMPLEX_UINT32
-expected_matlab_type(::Type{Complex{Int32}})    = COMPLEX_INT32
-expected_matlab_type(::Type{Complex{UInt64}})   = COMPLEX_UINT64
-expected_matlab_type(::Type{Complex{Int64}})    = COMPLEX_INT64
-
-expected_matlab_type(::Type{Array{T, N}}) where {T <: Union{Number, String}, N} = expected_matlab_type(T)
 
 
 const PRIMITIVE_TYPES_AND_SIZE = (
@@ -658,7 +552,7 @@ end
 Converting to: $(typename) 
 
 Incompatible datatypes conversion:
-    Actual MATLAB type:   $(array_type_name(matlabtype))[]
+    Actual MATLAB type:   $(matlab_type_name(matlabtype))[]
     Expected MATLAB type: $(expectedmatlabtypename)[]
 """)
 end
@@ -825,7 +719,7 @@ end
 
 
 function validate_matfrostarray_type_and_size(io::BufferedStream, ::Type{T}, header::MATFrostArrayHeader) where {T}
-    expected_type = expected_matlab_type(T)
+    expected_type = mapped_matlab_type(T)
 
     if (header.nel != 1)
         discard_matfrostarray_body!(io, header)
@@ -839,7 +733,7 @@ function validate_matfrostarray_type_and_size(io::BufferedStream, ::Type{T}, hea
 end
 
 function validate_matfrostarray_type_and_size(io::BufferedStream, ::Type{T}, header::MATFrostArrayHeader) where {T<:Array}
-    expected_type = expected_matlab_type(T)
+    expected_type = mapped_matlab_type(T)
 
     if (prod(header.dims1; init=1) != header.nel)
         discard_matfrostarray_body!(io, header)
@@ -852,288 +746,6 @@ function validate_matfrostarray_type_and_size(io::BufferedStream, ::Type{T}, hea
     nothing
 end
 
-
-# function read_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: Tuple{} where {T}
-
-#     header = read_matfrostarray_header3!(io)
-
-#     expected_type = expected_matlab_type(T)
-#     nel = prod(header.dims; init=1)
-#     if (nel != 1)
-#         discard_matfrostarray_body!(io, header)
-#         throw(not_scalar_value_exception(T, header.dims))
-#     elseif (header.type != expected_type)
-#         discard_matfrostarray_body!(io, header)
-#         throw(incompatible_datatypes_exception(T, header.type))
-#     end
-
-
-#     return ()
-# end
-# function read_matfrostarray_header2!(io::BufferedStream, ::Type{T})
-
-# end
-
-
-
-
-# function read_matfrostarray_header!(io::BufferedStream, ::Type{Array{T,N}}) :: NTuple{N, Int64} where {T,N}
-
-#     header = read_matfrostarray_header3!(io)
-
-
-#     expected_type = expected_matlab_type(Array{T,N})
-
-#     # incompatible_datatypes = type != expected_type
-#     # incompatible_array_dimension = false
-
-
-#     jldims = ntuple(Val{N}()) do i
-#         if i <= length(header.dims)
-#             header.dims[i]
-#         else
-#             1
-#         end
-#     end
-
-#     nel = prod(header.dims; init=1)
-
-#     if (prod(jldims; init=1) != nel)
-#         discard_matfrostarray_body!(io, header)
-#         throw(incompatible_array_dimensions_exception(Array{T,N}, header.dims))
-#     elseif (nel == 0) 
-#         # Special behavior if nel==0. For this case allow any datatype input. 
-#         # MATLAB does not act strict on the datatype of empty values.
-
-#         if header.type == STRUCT
-#             nfields = read!(io, Int64)
-#             for _ in 1:nfields
-#                 nb = read!(io, Int64)
-#                 discard!(io, nb)
-#             end
-#         end
-#     elseif (header.type != expected_type)
-#         discard_matfrostarray_body!(io, header)
-#         throw(incompatible_datatypes_exception(Array{T,N}, header.type))
-#     end
-
-
-#     return jldims
-# end
-
-
-
-# function validate_matfrostarray_type_and_size(io::BufferedStream, ::Type{T}, header::MATFrostArrayHeader) where {T<:Tuple}
-#     expected_type = expected_matlab_type(T)
-    
-#     if ((header.nel != length(fieldnames(T))) || (header.dims1[1] != header.nel))
-#         discard_matfrostarray_body!(io, header)
-#         throw("Tuple error size does not match")
-#     elseif (header.type != expected_type)
-#         discard_matfrostarray_body!(io, header)
-#         throw(incompatible_datatypes_exception(T, header.type))
-#     end
-
-#     nothing
-# end
-
-# function read_matfrostarray_header!(io::BufferedStream, ::Type{T}) :: NTuple{1, Int64} where {T <: Tuple}
-
-#     header = read_matfrostarray_header3!(io)
-
-
-#     expected_type = expected_matlab_type(T)
-
-#     jldims = (
-#         if 1 <= length(header.dims)
-#             header.dims[1]
-#         else
-#             1
-#         end
-#     )
-#     nel = prod(dims; init=1)
-#     if ((nel != length(fieldnames(T))) || (jldims[1] != nel))
-#         discard_matfrostarray_body!(io, header)
-#         throw("Tuple error size does not match")
-#     elseif (header.type != expected_type)
-#         discard_matfrostarray_body!(io, header)
-#         throw(incompatible_datatypes_exception(T, header.type))
-#     end
-
-
-#     return jldims
-# end
-
-
-
-# @noinline function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T <: Number}
-#     result = read_and_validate_matfrostarray_header!(io, T)
-#     v = result.x
-#     if isa(v, Err)
-#         v::Err{MATFrostException}
-#         MATFrostResult{T}(v.x)
-#     else
-#         MATFrostResult{T}(read!(io, T))     
-#     end
-#     # process(x::Err) = 
-#     # process(_::Ok) = 
-    
-#     # process(result.x)
-# end
-
-
-
-# """
-# Read a tuple object.
-# """
-# @generated function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T <: Tuple}
-    
-#     return quote
-
-#         dim = read_matfrostarray_header!(io, T)
-
-#         if (dim[1] != length(fieldnames(T)))
-#             discard_matfrostarray!(io, dim[1])
-#             throw("Cell does not contain amount of expected values:")
-#         end
-
-#         fi = 0
-#         try
-#             tup = ($((quote
-#                 (fi = $(i); @noinline read_matfrostarray!(io, $(fieldtypes(T)[i])))
-#             end for i in eachindex(fieldnames(T)))...),)
-            
-#             return T(tup)
-#         catch e
-#             discard_matfrostarray!(io, length(fieldnames(T)) - fi)
-#             throw(e)
-#         end
-
-
-#     end
-
-# end
-
-# function read_matrfrostarray_struct_header!(io::BufferedStream, expected_fieldnames::NTuple{N, Symbol}, nel::Int64) where {N}
-
-#     numfields_mat = read!(io, Int64)
-#     fieldnames_mat = Vector{Symbol}(undef, numfields_mat)
-#     fieldname_in_type = Vector{Bool}(undef, numfields_mat)
-#     for i in eachindex(fieldnames_mat)
-#         fieldnames_mat[i] = Symbol(read_string!(io))
-#         fieldname_in_type[i] = fieldnames_mat[i] in expected_fieldnames
-#     end
-    
-#     if (numfields_mat != N || !all(fieldname_in_type))
-#         discard_matfrostarray!(io, nel*numfields_mat)
-#         throw("Fieldnames do not match: \nExpected: " * string(expected_fieldnames) *
-#             "\nRecieved: " * string(fieldnames_mat))
-#     end
-
-#     return fieldnames_mat
-# end
-
-# """
-# Read a scalar struct object.
-# """
-# @generated function read_matfrostarray_struct_object!(io::BufferedStream, fieldnames_mat::Vector{Symbol}, ::Type{T}) where{T}
-#     quote
-#         # Create local variables with type annotation, {Nothing, FieldType}
-#         $((quote
-#             $(Symbol(:_lfv_, fieldnames(T)[i])) :: Union{Nothing, $(fieldtypes(T)[i])} = nothing
-#         end for i in eachindex(fieldnames(T)))...)
-
-#         # Parse each field value. Parsing must be done in the order of MATFrostSequence
-#         for fn_i in eachindex(fieldnames_mat)
-#             fieldname = fieldnames_mat[fn_i]
-#             try 
-#                 $((quote
-#                     if (fieldname == fieldnames(T)[$(i)])
-#                         $(Symbol(:_lfv_, fieldnames(T)[i])) = @noinline read_matfrostarray!(io, $(fieldtypes(T)[i]))
-#                     end
-#                 end for i in eachindex(fieldnames(T)))...)
-#             catch e
-#                 discard_matfrostarray!(io, length(fieldnames(T)) - fn_i)
-#                 throw(e)
-#             end
-#         end
-
-#         # Force {Nothing, FieldType} to FieldType
-#         $((quote
-#             $(Symbol(:_lfva_, fieldnames(T)[i])) :: $(fieldtypes(T)[i]) = $(Symbol(:_lfv_, fieldnames(T)[i]))
-#         end for i in eachindex(fieldnames(T)))...)
-
-#         # Construct new struct
-#         $(
-#             if (T <: NamedTuple)
-#                 :(T(($((Symbol(:_lfva_, fieldnames(T)[i]) for i in eachindex(fieldnames(T)))...),)))
-#             else    
-#                 :(T($((Symbol(:_lfva_, fieldnames(T)[i]) for i in eachindex(fieldnames(T)))...)))
-#             end
-#         )
-#     end
-# end
-
-# """
-# Read scalar struct object from MATFrostArray
-# """
-# @generated function read_matfrostarray!(io::BufferedStream, ::Type{T}) where {T}
-#     if isabstracttype(T)
-#         return quote
-#             discard_matfrostarray!(io)
-#             throw("Interface contains abstract type: " * string(T))
-#         end
-#     end
-
-#     return quote
-#         read_matfrostarray_header!(io, T)
-#         fieldnames_mat = read_matrfrostarray_struct_header!(io, fieldnames(T), 1)
-
-#         read_matfrostarray_struct_object!(io, fieldnames_mat, T)
-
-#     end
-
-# end
-
-# """
-# Read array of struct objects from MATFrostArray
-# """
-# @generated function read_matfrostarray!(io::BufferedStream, ::Type{Array{T,N}}) where {T,N}
-#     if isabstracttype(T)
-#         return quote
-#             discard_matfrostarray!(io)
-#             throw("Interface contains abstract type: " * string(T))
-#         end
-#     end
-
-
-#     return quote
-#         dims = read_matfrostarray_header!(io, Array{T,N})
-
-#         nel = prod(dims; init=1)
-
-#         if nel == 0 
-#             # Special behavior for empty arrays. 
-#             # The matfrostarray object has already been cleared in read_matfrostarray_header!
-#             return Array{T,N}(undef, dims)
-#         end
-        
-#         fieldnames_mat = read_matrfrostarray_struct_header!(io, fieldnames(T), nel)
-
-#         arr = Array{T,N}(undef, dims)
-        
-#         for eli in eachindex(arr)
-#             try
-#                 arr[eli] = read_matfrostarray_struct_object!(io, fieldnames_mat, T)
-#             catch e
-#                 discard_matfrostarray!(io, (nel-eli)*length(fieldnames_mat))
-#                 throw(e)
-#             end
-#         end
-#         arr
-#     end
-
-# end
 
 
 
