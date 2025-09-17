@@ -2,7 +2,7 @@ module _Read
 
 import ..MATFrost._Stream: read!, write!, flush!, BufferedStream, discard!
 using ..MATFrost: _MATFrostException as MATFrostException
-
+using .._Constants
 
 
 struct Ok{T}
@@ -380,52 +380,6 @@ function read_and_validate_matfrostarray_header!(io::BufferedStream, ::Type{T}) 
 
 end
 
-
-
-
-
-
-
-const LOGICAL = Int32(0)
-
-const CHAR = Int32(1)
-
-const MATLAB_STRING = Int32(2)
-
-const DOUBLE = Int32(3)
-const SINGLE = Int32(4)
-
-const INT8 = Int32(5)
-const UINT8 = Int32(6)
-const INT16 = Int32(7)
-const UINT16 = Int32(8)
-const INT32 = Int32(9)
-const UINT32 = Int32(10)
-const INT64 = Int32(11)
-const UINT64 = Int32(12)
-
-const COMPLEX_DOUBLE = Int32(13)
-const COMPLEX_SINGLE = Int32(14)
-
-const COMPLEX_INT8 = Int32(15)
-const COMPLEX_UINT8 = Int32(16)
-const COMPLEX_INT16 = Int32(17)
-const COMPLEX_UINT16 = Int32(18)
-const COMPLEX_INT32 = Int32(19)
-const COMPLEX_UINT32 = Int32(20)
-const COMPLEX_INT64 = Int32(21)
-const COMPLEX_UINT64 = Int32(22)
-
-const CELL = Int32(23)
-const STRUCT = Int32(24)
-
-const OBJECT = Int32(25)
-const VALUE_OBJECT = Int32(26)
-const HANDLE_OBJECT_REF = Int32(27)
-const ENUM = Int32(28)
-const SPARSE_LOGICAL = Int32(29)
-const SPARSE_DOUBLE = Int32(30)
-const SPARSE_COMPLEX_DOUBLE = Int32(31)
 
 
 

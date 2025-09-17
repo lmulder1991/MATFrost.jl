@@ -16,6 +16,9 @@ struct _MATFrostException <: Exception
     message::String
 end
 
+
+include("constants.jl")
+
 include("stream.jl")
 
 include("read.jl")
