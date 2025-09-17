@@ -6,11 +6,6 @@
 #include <string>
 #include <complex>
 #include <memory>
-//
-// extern "C" {
-// #include "matfrost.h"
-// }
-//
 
 
 namespace MATFrost::ConvertToMATLAB {
@@ -103,109 +98,7 @@ namespace MATFrost::ConvertToMATLAB {
         return matstruct;
     }
 
-//
-// matlab::data::Array convert(const MATFrostArray mfa);
-//
-//
-// template<typename T>
-// matlab::data::Array convert_primitive(const MATFrostArray mfa) {
-//     matlab::data::ArrayDimensions dims(mfa.ndims);
-//
-//     size_t nel = 1;
-//     for (size_t i = 0; i < mfa.ndims; i++){
-//         dims[i] = mfa.dims[i];
-//         nel *= dims[i];
-//     }
-//
-//     matlab::data::ArrayFactory factory;
-//
-//     matlab::data::buffer_ptr_t<T> buf = factory.createBuffer<T>(nel);
-//
-//     memcpy(buf.get(), mfa.data, sizeof(T)*nel);
-//
-//     return factory.createArrayFromBuffer<T>(dims, std::move(buf));
-//
-// }
-//
-// matlab::data::Array convert_string(const MATFrostArray mfa){
-//     matlab::data::ArrayDimensions dims(mfa.ndims);
-//
-//     size_t nel = 1;
-//     for (size_t i = 0; i < mfa.ndims; i++){
-//         dims[i] = mfa.dims[i];
-//         nel *= dims[i];
-//     }
-//
-//     matlab::data::ArrayFactory factory;
-//
-//     matlab::data::StringArray strarr = factory.createArray<matlab::data::MATLABString>(dims);
-//
-//     size_t eli = 0;
-//     const char** strdata = (const char**) mfa.data;
-//     for (auto e : strarr) {
-         // e = matlab::engine::convertUTF8StringToUTF16String(strdata[eli]);
-         // eli++;
-//     }
-//     return strarr;
-// }
-//
-//
-// matlab::data::Array convert_struct(const MATFrostArray mfa) {
-//     matlab::data::ArrayDimensions dims(mfa.ndims);
-//
-//     size_t nel = 1;
-//     for (size_t i = 0; i < mfa.ndims; i++){
-//         dims[i] = mfa.dims[i];
-//         nel *= dims[i];
-//     }
-//
-//     std::vector<std::string> fieldnames(mfa.nfields);
-//     for (size_t i = 0; i < mfa.nfields; i++){
-//         fieldnames[i] = mfa.fieldnames[i];
-//     }
-//
-//     matlab::data::ArrayFactory factory;
-//
-//     matlab::data::StructArray matstruct = factory.createStructArray(dims, fieldnames);
-//
-//     size_t eli = 0;
-//     const MATFrostArray** mfafields = (const MATFrostArray**) mfa.data;
-//     for (auto e : matstruct) {
-//         for (size_t fi = 0; fi < mfa.nfields; fi++){
-//             e[fieldnames[fi]] = convert(mfafields[eli][0]);
-//
-//             eli++;
-//         }
-//     }
-//
-//     return matstruct;
-// }
-//
-// matlab::data::Array convert_cell(const MATFrostArray mfa) {
-//     matlab::data::ArrayDimensions dims(mfa.ndims);
-//
-//     size_t nel = 1;
-//     for (size_t i = 0; i < mfa.ndims; i++){
-//         dims[i] = mfa.dims[i];
-//         nel *= dims[i];
-//     }
-//
-//     matlab::data::ArrayFactory factory;
-//
-//     matlab::data::CellArray carr = factory.createCellArray(dims);
-//
-//     size_t eli = 0;
-//     const MATFrostArray** mfafields = (const MATFrostArray**) mfa.data;
-//     for (auto e : carr) {
-//         e = convert(mfafields[eli][0]);
-//         eli++;
-//     }
-//
-//     return carr;
-// }
-//
-//
-//
+
 matlab::data::Array read(BufferedInputStream& is){
     int32_t type;
     size_t ndims;

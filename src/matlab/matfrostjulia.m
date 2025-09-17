@@ -30,8 +30,10 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
                     % The directory where the Julia environment is located.
                     % This will overrule the version specification.
                     % NOTE: Only needed if version is not specified.
+                argstruct.project     (1,1) string = ""
                 argstruct.instantiate (1,1) logical = false
                     % Resolve project environment
+
             end
             
             if isfield(argstruct, 'bindir')
