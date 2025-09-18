@@ -1,5 +1,9 @@
 module _Constants
 
+export mapped_matlab_type, matlab_type_name
+
+export sizeof_matlab_primitive
+
 export LOGICAL, CHAR, MATLAB_STRING,
     DOUBLE, SINGLE,
     INT8, UINT8, INT16, UINT16, INT32, UINT32, INT64, UINT64,
@@ -8,9 +12,8 @@ export LOGICAL, CHAR, MATLAB_STRING,
     COMPLEX_INT32, COMPLEX_UINT32, COMPLEX_INT64, COMPLEX_UINT64,
     CELL, STRUCT, 
     OBJECT, VALUE_OBJECT, HANDLE_OBJECT_REF, ENUM, 
-    SPARSE_LOGICAL, SPARSE_DOUBLE, SPARSE_COMPLEX_DOUBLE,
-    mapped_matlab_type,
-    matlab_type_name
+    SPARSE_LOGICAL, SPARSE_DOUBLE, SPARSE_COMPLEX_DOUBLE
+
 
 
 const LOGICAL = Int32(0)
@@ -164,6 +167,64 @@ function matlab_type_name(type::Int32)
     else
         "unknown"
     end
+end
+
+
+const PRIMITIVE_TYPES_AND_SIZE = (
+    (LOGICAL, 1), 
+    (DOUBLE, 8), (SINGLE, 4), 
+    (INT8, 1), (UINT8, 1), (INT16, 2), (UINT16,2), (INT32,4), (UINT32,4), (INT64,8), (UINT64,8),
+    (COMPLEX_DOUBLE, 16), (COMPLEX_SINGLE,8),
+    (COMPLEX_INT8, 2), (COMPLEX_UINT8, 2), (COMPLEX_INT16, 4), (COMPLEX_UINT16,4), (COMPLEX_INT32,8), (COMPLEX_UINT32,8), (COMPLEX_INT64,16), (COMPLEX_UINT64,16),
+)
+
+function sizeof_matlab_primitive(type::Int32)
+    if type == LOGICAL
+        1
+    elseif type == DOUBLE
+        8
+    elseif type == SINGLE
+        4
+    elseif type == INT8
+        1
+    elseif type == UINT8
+        1
+    elseif type == INT16
+        2
+    elseif type == UINT16
+        2
+    elseif type == INT32
+        4
+    elseif type == UINT32
+        4
+    elseif type == INT64
+        8
+    elseif type == UINT64
+        8
+    elseif type == COMPLEX_DOUBLE
+        16
+    elseif type == COMPLEX_SINGLE
+        8
+    elseif type == COMPLEX_INT8
+        2
+    elseif type == COMPLEX_UINT8
+        2
+    elseif type == COMPLEX_INT16
+        4
+    elseif type == COMPLEX_UINT16
+        4
+    elseif type == COMPLEX_INT32
+        8
+    elseif type == COMPLEX_UINT32
+        8
+    elseif type == COMPLEX_INT64
+        16
+    elseif type == COMPLEX_UINT64
+        16
+    else
+        0
+    end
+
 end
 
 end

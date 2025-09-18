@@ -382,55 +382,6 @@ end
 
 
 
-
-
-
-expected_matlab_type_name(::Type{T}) where {T} = "struct"
-
-expected_matlab_type_name(::Type{T}) where {T<:Tuple} = "cell"
-expected_matlab_type_name(::Type{T}) where {T<:Array{<:Union{Array,Tuple}}} = "cell"
-
-expected_matlab_type_name(::Type{String}) = "string"
-
-expected_matlab_type_name(::Type{Float32}) = "single"
-expected_matlab_type_name(::Type{Float64}) = "double"
-
-expected_matlab_type_name(::Type{UInt8})   = "uint8"
-expected_matlab_type_name(::Type{Int8})    = "int8"
-expected_matlab_type_name(::Type{UInt16})   = "uint16"
-expected_matlab_type_name(::Type{Int16})    = "int16"
-expected_matlab_type_name(::Type{UInt32})   = "uint32"
-expected_matlab_type_name(::Type{Int32})    = "int32"
-expected_matlab_type_name(::Type{UInt64})   = "uint64"
-expected_matlab_type_name(::Type{Int64})    = "int64"
-
-expected_matlab_type_name(::Type{Complex{Float32}}) = "complex single"
-expected_matlab_type_name(::Type{Complex{Float64}}) = "complex double"
-
-expected_matlab_type_name(::Type{Complex{UInt8}})   = "complex uint8"
-expected_matlab_type_name(::Type{Complex{Int8}})    = "complex int8"
-expected_matlab_type_name(::Type{Complex{UInt16}})   = "complex uint16"
-expected_matlab_type_name(::Type{Complex{Int16}})    = "complex int16"
-expected_matlab_type_name(::Type{Complex{UInt32}})   = "complex uint32"
-expected_matlab_type_name(::Type{Complex{Int32}})    = "complex int32"
-expected_matlab_type_name(::Type{Complex{UInt64}})   = "complex uint64"
-expected_matlab_type_name(::Type{Complex{Int64}})    = "complex int64"
-
-expected_matlab_type_name(::Type{Array{T, N}}) where {T <: Union{Number, String}, N} = expected_matlab_type_name(T)
-
-
-
-
-
-const PRIMITIVE_TYPES_AND_SIZE = (
-    (LOGICAL, 1), 
-    (DOUBLE, 8), (SINGLE, 4), 
-    (INT8, 1), (UINT8, 1), (INT16, 2), (UINT16,2), (INT32,4), (UINT32,4), (INT64,8), (UINT64,8),
-    (COMPLEX_DOUBLE, 16), (COMPLEX_SINGLE,8),
-    (COMPLEX_INT8, 2), (COMPLEX_UINT8, 2), (COMPLEX_INT16, 4), (COMPLEX_UINT16,4), (COMPLEX_INT32,8), (COMPLEX_UINT32,8), (COMPLEX_INT64,16), (COMPLEX_UINT64,16),
-)
-
-
 function read_string!(io::BufferedStream) :: String
     sarr = Vector{UInt8}(undef, read!(io, Int64))
     read!(io, sarr)
@@ -469,12 +420,8 @@ Used in cases of errors to keep the connection state correct.
                 discard!(io, nb)
             end
         else
-            for (prim_type, prim_size) in PRIMITIVE_TYPES_AND_SIZE
-                if prim_type == type
-                    nb = prim_size*nel
-                    discard!(io, nb)
-                end
-            end
+            nb = nel * sizeof_matlab_primitive(type)
+            discard!(io, nb)
         end
         
         numobjects -= 1
@@ -504,12 +451,8 @@ NOTE: Very similar to `discard_matfrostarray`
             discard!(io, nb)
         end
     else
-        for (prim_type, prim_size) in PRIMITIVE_TYPES_AND_SIZE
-            if prim_type == type
-                nb = prim_size*nel
-                discard!(io, nb)
-            end
-        end
+        nb = nel * sizeof_matlab_primitive(type)
+        discard!(io, nb)
     end
     nothing
 end
@@ -559,7 +502,7 @@ end
 
 @noinline function incompatible_datatypes_exception(::Type{T}, matlabtype::Int32) where {T}
     typename = _typename(T)
-    expectedmatlabtypename = expected_matlab_type_name(T)
+    expectedmatlabtypename = matlab_type_name(mapped_matlab_type(T))
 
     incompatible_datatypes_exception(typename, expectedmatlabtypename, matlabtype)
 end
