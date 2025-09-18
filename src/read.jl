@@ -513,7 +513,7 @@ end
 
 
 @noinline function incompatible_array_dimensions_exception(typename::String, expectednumdims::Int64, dims::Vector{Int64})
-    dimsprint = ((string(dim) * ", ") for dim in dims)
+    dimsprint = ("$(dim), " for dim in dims)
 
     MATFrostException(
         "matfrostjulia:conversion:incompatibleArrayDimensions",
@@ -562,9 +562,9 @@ end
 
 
 @noinline function missing_fields_exception(typename::String, fieldnames::Vector{Symbol}, fieldtypenames::Vector{String}, fieldnames_mat::Vector{Symbol})
-    missingfields  = ("    " * String(fn) * "\n" for fn in fieldnames if !(fn in fieldnames_mat))
-    actualfields   = ("    " * String(fn) * "\n"  for fn in fieldnames_mat)
-    expectedfields = ("    " * String(fn) * "::" * ftn * "\n" for (fn, ftn)  in zip(fieldnames, fieldtypenames))
+    missingfields  = ("    $(fn)\n" for fn in fieldnames if !(fn in fieldnames_mat))
+    actualfields   = ("    $(fn)\n"  for fn in fieldnames_mat)
+    expectedfields = ("    $(fn)::$(ftn)\n" for (fn, ftn)  in zip(fieldnames, fieldtypenames))
 
   MATFrostException(
         "matfrostjulia:conversion:missingFields",
