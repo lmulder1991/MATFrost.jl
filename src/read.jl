@@ -272,12 +272,13 @@ Read a scalar struct object.
             if (fn_mat == fieldnames(T)[$(i)])
                 result = (@noinline read_matfrostarray!(io, $(fieldtypes(T)[i]))).x
 
-                if result isa Err    
+                if result isa Ok    
+                    $(Symbol(:_lfv_, fieldnames(T)[i])) = result.x
+                else
                     discard_matfrostarray!(io, length(fieldnames_mat) - fn_i)
                     return MATFrostResult{T}(result.x)
                 end
 
-                $(Symbol(:_lfv_, fieldnames(T)[i])) = result.x
             end
 
             end for i in eachindex(fieldnames(T))
@@ -288,18 +289,20 @@ Read a scalar struct object.
         # Check if all values are given value
         if $((x = :(false) ; for fn in fieldnames(T) ; x = :(($(Symbol(:_lfv_, fn)) isa Nothing) || $(x)) ; end ; x))
             return MATFrostResult{T}(MATFrostException("", "Value not initalized"))
+        else
+            # Construct new struct
+            v = $(
+                if (T <: NamedTuple)
+                    :(T(($((Symbol(:_lfv_, fn) for fn in fieldnames(T))...),)))
+                else    
+                    :(T($((Symbol(:_lfv_, fn) for fn in fieldnames(T))...)))
+                end
+            )
+
+            return MATFrostResult{T}(v)
         end       
 
-        # Construct new struct
-        v = $(
-            if (T <: NamedTuple)
-                :(T(($((Symbol(:_lfv_, fn) for fn in fieldnames(T))...),)))
-            else    
-                :(T($((Symbol(:_lfv_, fn) for fn in fieldnames(T))...)))
-            end
-        )
-
-        MATFrostResult{T}(v)
+        
     end
 end
 
