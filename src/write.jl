@@ -58,25 +58,40 @@ end
 end
 
 @generated function write_matfrostarray!(io::BufferedStream, arr::Array{T,N}) where {T,N}
-    quote
-        write!(io, STRUCT)
-        write!(io, Int64(N)) # ndims
-        for i in 1:N
-            write!(io, Int64(size(arr, i)))
-        end
+    if isstructtype(T)
+        quote
+            write!(io, STRUCT)
+            write!(io, Int64(N)) # ndims
+            for i in 1:N
+                write!(io, Int64(size(arr, i)))
+            end
 
-        write!(io, Int64(fieldcount(T))) # numfields
-        for fn in fieldnames(T)
-            write!(io, String(fn))
-        end
+            write!(io, Int64(fieldcount(T))) # numfields
+            for fn in fieldnames(T)
+                write!(io, String(fn))
+            end
 
-        for el in arr
-            $((
-                :(write_matfrostarray!(io, el.$fn))
-                for fn in fieldnames(T)
-            )...)
+            for el in arr
+                $((
+                    :(write_matfrostarray!(io, el.$fn))
+                    for fn in fieldnames(T)
+                )...)
+            end
+            nothing
         end
-        nothing
+    else
+        quote
+            write!(io, CELL)
+            write!(io, Int64(N)) # ndims
+            for i in 1:N
+                write!(io, Int64(size(arr, i)))
+            end
+        
+            for el in arr
+                write_matfrostarray!(io, el)
+            end
+            nothing
+        end
     end
 end
 
@@ -94,7 +109,7 @@ end
     end
 end
 
-@generated function write_matfrostarray!(io::BufferedStream, arr::Array{T,N}) where {T<:Array}
+@generated function write_matfrostarray!(io::BufferedStream, arr::Array{T,N}) where {T<:Union{Array, Tuple}, N}
     quote 
         write!(io, CELL)
         write!(io, Int64(N)) # ndims
