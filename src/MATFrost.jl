@@ -24,7 +24,6 @@ include("stream.jl")
 include("read.jl")
 include("write.jl")
 include("install.jl")
-include("register.jl")
 
 include("server.jl")
 
