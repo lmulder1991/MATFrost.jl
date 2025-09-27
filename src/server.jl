@@ -10,6 +10,12 @@ struct CallMeta
     fully_qualified_name::String
 end
 
+struct MATFrostResultMATLAB{T}
+    status::String # ERROR/SUCCESFUL
+    log::String
+    value::T
+end
+
 matfrosttest(x::Float64)=23*x
 
 function getfunction(meta::CallMeta)
@@ -49,65 +55,69 @@ function getfunction(meta::CallMeta)
 
 end
 
+function matfrostexceptionresult(id, message)
+    MATFrostResultMATLAB{MATFrostException}(
+        "ERROR",
+        "",
+        MATFrostException(id, message)
+    )
+end
 
-function callsequence()
+function callsequence(matfrostin::BufferedStream, matfrostout::BufferedStream)
+    header = read_matfrostarray_header!(matfrostin)
+    
+    if header.type != CELL || prod(header.dims) != 2
+        # This should in theory not happen.
+        discard_matfrostarray_body!(matfrostin, header)
+        write_matfrostarray!(matfrostout, matfrostexceptionresult("", "error"))
+        return
+    end
 
+    meta = read_matfrostarray!(matfrostin, CallMeta).x
+
+    if meta isa Err
+        discard_matfrostarray!(matfrostin)
+        write_matfrostarray!(matfrostout, matfrostexceptionresult("", "CallMeta not properly written"))
+        return
+    end
+
+    f = getfunction(meta.x)
+
+    if isnothing(f)
+        discard_matfrostarray!(matfrostin)
+        write_matfrostarray!(matfrostout, matfrostexceptionresult("", "Cannot find function"))
+        return
+    end
+
+    Args = Tuple{methods(f)[1].sig.types[2:end]...}
+
+    args = read_matfrostarray!(matfrostin, Args).x
+
+    if args isa Err
+        write_matfrostarray!(matfrostout, matfrostexceptionresult("", "Parsing error"))
+        return
+    end
+
+    try
+        o = f((args.x)...)
+        write_matfrostarray!(matfrostout, 
+            MATFrostResultMATLAB("SUCCESFUL", "", o)
+        )
+    catch
+        write_matfrostarray!(matfrostout, matfrostexceptionresult("", "Execution error"))
+    end
 end
 
 
-function matfrostserve(matfrostin::Ptr{Cvoid}, matfrostout::Ptr{Cvoid})
-    in_buf = BufferedStream(matfrostin, Vector{UInt8}(undef, 2<<13), 0, 0)
-    out_buf  = BufferedStream(matfrostout, Vector{UInt8}(undef, 2<<13), 0, 0)
+function matfrostserve(matfrostin_handle::Ptr{Cvoid}, matfrostout_handle::Ptr{Cvoid})
+    matfrostin = BufferedStream(matfrostin_handle, Vector{UInt8}(undef, 2<<13), 0, 0)
+    matfrostout  = BufferedStream(matfrostout_handle, Vector{UInt8}(undef, 2<<13), 0, 0)
 
     while true  
         try 
 
-            header = read_matfrostarray_header!(in_buf)
-
-            if header.type != CELL || prod(header.dims) != 2
-                # This should in theory not happen.
-                discard_matfrostarray_body!(in_buf, header)
-                write_matfrostarray!(out_buf, "error")
-                flush!(out_buf)
-                continue
-            end
-
-            meta = read_matfrostarray!(in_buf, CallMeta)
-            if meta.x isa Err
-                discard_matfrostarray!(in_buf)
-                write_matfrostarray!(out_buf, "error")
-                flush!(out_buf)
-                continue
-            end
-
-
-            f = getfunction(meta.x.x)
-
-            if isnothing(f)
-                discard_matfrostarray!(in_buf)
-                write_matfrostarray!(out_buf, "error")
-                flush!(out_buf)
-                continue
-            end
-
-            Args = Tuple{methods(f)[1].sig.types[2:end]...}
-
-            args = read_matfrostarray!(in_buf, Args)
-
-            if args.x isa Err
-                write_matfrostarray!(out_buf, "error")
-                flush!(out_buf)
-                continue
-            end
-
-            try
-                o = f((args.x.x)...)
-                write_matfrostarray!(out_buf, o)           
-                flush!(out_buf)
-            catch
-                write_matfrostarray!(out_buf, "Execution error")           
-                flush!(out_buf)
-            end
+            callsequence(matfrostin, matfrostout)
+            flush!(matfrostout)
 
         catch e
             
