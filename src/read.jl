@@ -38,7 +38,7 @@ end
 
 
 
-function jldims(header::MATFrostArrayHeader, ::Val{N}) where N
+function array_dims(header::MATFrostArrayHeader, ::Val{N}) where N
     ntuple(Val{N}()) do i
         if 1 <= length(header.dims)
             header.dims[i]
@@ -81,7 +81,7 @@ function read_matfrostarray!(io::BufferedStream, ::Type{T}, header::MATFrostArra
 end
 
 function read_matfrostarray!(io::BufferedStream, ::Type{Array{T,N}}, header::MATFrostArrayHeader) where {N, T <: Number}
-    dims = jldims(header, Val{N}())
+    dims = array_dims(header, Val{N}())
     arr = Array{T,N}(undef, dims)
     read!(io, arr)
     MATFrostResult{Array{T,N}}(arr)
@@ -95,7 +95,7 @@ end
 
 
 function read_matfrostarray!(io::BufferedStream, ::Type{Array{String,N}}, header::MATFrostArrayHeader) where {N}
-    dims = jldims(header, Val{N}())
+    dims = array_dims(header, Val{N}())
     arr = Array{String, N}(undef, dims)
     for i in eachindex(arr)
         arr[i] = read_string!(io)
@@ -107,7 +107,7 @@ end
 
 @generated function read_matfrostarray!(io::BufferedStream, ::Type{Array{T,N}}, header::MATFrostArrayHeader) where {T <: Union{Array, Tuple}, N}
     return quote
-        dims = jldims(header, Val{N}())
+        dims = array_dims(header, Val{N}())
         arr = Array{T, N}(undef, dims)
         for i in eachindex(arr)
             result = (@noinline read_matfrostarray!(io, T)).x
@@ -190,7 +190,7 @@ Read array of struct objects from MATFrostArray
 
 
     return quote
-        dims = jldims(header, Val{N}())
+        dims = array_dims(header, Val{N}())
 
         nel = prod(dims; init=1)
 
