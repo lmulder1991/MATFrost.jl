@@ -278,11 +278,14 @@ Read a scalar struct object.
                     discard_matfrostarray!(io, length(fieldnames_mat) - fn_i)
                     return MATFrostResult{T}(result.x)
                 end
-
+                
+                continue
             end
 
             end for i in eachindex(fieldnames(T))
             )...)
+
+            discard_matfrostarray!(io, 1)
 
         end
 
