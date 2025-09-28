@@ -1,6 +1,7 @@
 module _Constants
 
-export matlab_type, matlab_type_name
+
+export matlab_type, matlab_type_name, matlab_type_nospecialize
 
 export sizeof_matlab_primitive
 
@@ -14,7 +15,7 @@ export LOGICAL, CHAR, MATLAB_STRING,
     OBJECT, VALUE_OBJECT, HANDLE_OBJECT_REF, ENUM, 
     SPARSE_LOGICAL, SPARSE_DOUBLE, SPARSE_COMPLEX_DOUBLE
 
-
+using .._Types
 
 const LOGICAL = Int32(0)
 
@@ -93,8 +94,72 @@ matlab_type(::Type{Complex{Int64}})    = COMPLEX_INT64
 
 matlab_type(::Type{Array{T, N}}) where {T <: Union{Number, String}, N} = matlab_type(T)
 
+matlab_type(::MATFrostArrayEmpty) = DOUBLE
+matlab_type(::MATFrostArrayStruct) = STRUCT
+matlab_type(::MATFrostArrayCell) = CELL
+matlab_type(::MATFrostArrayString) = matlab_type(String)
+matlab_type(::MATFrostArrayPrimitive{T}) where {T} = matlab_type(T)
 
 
+@noinline function matlab_type_nospecialize(@nospecialize(marr::MATFrostArrayAbstract))::Int32
+    if marr isa MATFrostArrayEmpty
+        matlab_type(marr)
+    
+    elseif marr isa MATFrostArrayStruct
+        matlab_type(marr)
+    elseif marr isa MATFrostArrayString
+        matlab_type(marr)
+    elseif marr isa MATFrostArrayCell
+        matlab_type(marr)
+
+    elseif marr isa MATFrostArrayPrimitive{Float64}
+        matlab_type(marr)
+    elseif marr isa MATFrostArrayPrimitive{Float32}
+        matlab_type(marr)
+
+        
+    elseif marr isa MATFrostArrayPrimitive{Complex{Float64}}
+        matlab_type(marr)
+    elseif marr isa MATFrostArrayPrimitive{Complex{Float32}}
+        matlab_type(marr)
+
+    elseif marr isa MATFrostArrayPrimitive{Int8}
+        matlab_type(marr)
+    elseif marr isa MATFrostArrayPrimitive{UInt8}
+        matlab_type(marr)
+    elseif marr isa MATFrostArrayPrimitive{Int16}
+        matlab_type(marr)
+    elseif marr isa MATFrostArrayPrimitive{UInt16}
+        matlab_type(marr)
+    elseif marr isa MATFrostArrayPrimitive{Int32}
+        matlab_type(marr)
+    elseif marr isa MATFrostArrayPrimitive{UInt32}
+        matlab_type(marr)
+    elseif marr isa MATFrostArrayPrimitive{Int64}
+        matlab_type(marr)
+    elseif marr isa MATFrostArrayPrimitive{UInt64}
+        matlab_type(marr)
+
+    elseif marr isa MATFrostArrayPrimitive{Complex{Int8}}
+        matlab_type(marr)
+    elseif marr isa MATFrostArrayPrimitive{Complex{UInt8}}
+        matlab_type(marr)
+    elseif marr isa MATFrostArrayPrimitive{Complex{Int16}}
+        matlab_type(marr)
+    elseif marr isa MATFrostArrayPrimitive{Complex{UInt16}}
+        matlab_type(marr)
+    elseif marr isa MATFrostArrayPrimitive{Complex{Int32}}
+        matlab_type(marr)
+    elseif marr isa MATFrostArrayPrimitive{Complex{UInt32}}
+        matlab_type(marr)
+    elseif marr isa MATFrostArrayPrimitive{Complex{Int64}}
+        matlab_type(marr)
+    elseif marr isa MATFrostArrayPrimitive{Complex{UInt64}}
+        matlab_type(marr)
+    else
+        Int32(0)
+    end
+end
 
 
 function matlab_type_name(type::Int32)

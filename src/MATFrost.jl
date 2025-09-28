@@ -11,17 +11,15 @@ function _write! end
 
 macro matfrostserve end
 
-struct _MATFrostException <: Exception 
-    id::String
-    message::String
-end
 
 
+include("types.jl")
 include("constants.jl")
 
 include("stream.jl")
 
 include("read.jl")
+include("convert.jl")
 include("read2.jl")
 include("write.jl")
 include("install.jl")

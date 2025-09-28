@@ -1,7 +1,7 @@
 module _Read2
 
 import ..MATFrost._Stream: read!, write!, flush!, BufferedStream, discard!
-using ..MATFrost: _MATFrostException as MATFrostException
+using .._Types
 using .._Constants
 
 
