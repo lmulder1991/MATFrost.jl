@@ -2,6 +2,8 @@
 module CompositeTests
 
 using Test
+using JET
+
 using ..Types
 using ..BufferPrimitives
 using MATFrost._Stream: BufferedStream
@@ -186,6 +188,9 @@ end
     @test stream.available - stream.position == 20
     presult = convert_matfrostarray(StructTest3, marr)
     @test deepequal(presult, nest)
+
+    @test_opt convert_matfrostarray(StructTest3, marr)
+    @test_call convert_matfrostarray(StructTest3, marr)
 end
 
 end

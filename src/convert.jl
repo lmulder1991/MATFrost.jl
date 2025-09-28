@@ -179,40 +179,31 @@ end
 
 
 """
-Convert single struct object
+Convert single struct object (Struct/NamedTuple)
 """
 @generated function convert_matfrostarray_struct_object(::Type{T}, marr::MATFrostArrayStruct, i::Int64) where {T}
-quote
-    T($((
-        quote 
-            try
-                convert_matfrostarray($(fieldtype(T, fi)), get_matfrostarray_element(marr, fieldname(T, $fi), i))
-            catch e
-                rethrow(e)
-            end
-        end for fi in 1:fieldcount(T)
-    )...),)
-end   
+
+    conversions = (quote 
+        try
+            convert_matfrostarray($(fieldtype(T, fi)), get_matfrostarray_element(marr, fieldname(T, $fi), i))
+        catch e
+            rethrow(e)
+        end
+    end for fi in 1:fieldcount(T))
+
+    
+    if T <: NamedTuple
+        quote
+            T(($(conversions...),))
+        end  
+    else # Regular struct
+        quote
+            T($(conversions...),)
+        end  
+    end
+
 end
 
-
-
-"""
-Convert single namedtuple object
-"""
-@generated function convert_matfrostarray_struct_object(::Type{T}, marr::MATFrostArrayStruct, i::Int64) where {T<:NamedTuple}
-quote
-    T(($((
-        quote 
-            try
-                convert_matfrostarray($(fieldtype(T, fi)), get_matfrostarray_element(marr, fieldname(T, $fi), i))
-            catch e
-                rethrow(e)
-            end
-        end for fi in 1:fieldcount(T)
-    )...),))
-end   
-end
 
 
 function get_matfrostarray_element(marr::MATFrostArrayStruct, fn::Symbol, i::Int64)
