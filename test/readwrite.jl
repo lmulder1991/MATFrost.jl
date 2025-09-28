@@ -2,7 +2,7 @@
 
 """
 This file contains inefficiently written code to map julia objects to matfrostarray. 
-This scripts will write purely to buffer.
+This scripts will write purely to buffer (and increase if unsufficient size)
 """
 function _writebuffer!(io::BufferedStream, v::T) where T
     while length(io.buffer) - io.available < sizeof(T)
