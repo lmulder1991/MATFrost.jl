@@ -22,6 +22,7 @@ include("constants.jl")
 include("stream.jl")
 
 include("read.jl")
+include("read2.jl")
 include("write.jl")
 include("install.jl")
 
