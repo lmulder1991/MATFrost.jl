@@ -8,7 +8,7 @@ using .._Constants
 
 
 function write_matfrostarray!(io::BufferedStream, v::T) where{T <: Union{Number, String}}
-    write!(io, mapped_matlab_type(T))
+    write!(io, matlab_type(T))
     write!(io, Int64(1))
     write!(io, Int64(1))
     write!(io, v)
@@ -16,7 +16,7 @@ function write_matfrostarray!(io::BufferedStream, v::T) where{T <: Union{Number,
 end
 
 function write_matfrostarray!(io::BufferedStream, arr::Array{T,N}) where{N, T <: Number}
-    write!(io, mapped_matlab_type(T))
+    write!(io, matlab_type(T))
     write!(io, Int64(N))
     for i in 1:N
         write!(io, Int64(size(arr, i)))

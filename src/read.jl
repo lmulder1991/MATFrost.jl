@@ -318,7 +318,7 @@ function read_and_validate_matfrostarray_header!(io::BufferedStream, ::Type{T}) 
 
     header = read_matfrostarray_header!(io)
 
-    expected_type = mapped_matlab_type(T)
+    expected_type = matlab_type(T)
     nel = prod(header.dims; init=1)
     if (nel != 1)
         discard_matfrostarray_body!(io, header)
@@ -334,7 +334,7 @@ end
 function read_and_validate_matfrostarray_header!(io::BufferedStream, ::Type{Array{T,N}}) :: MATFrostResult{MATFrostArrayHeader} where {T,N}
     header = read_matfrostarray_header!(io)
 
-    expected_type = mapped_matlab_type(Array{T,N})
+    expected_type = matlab_type(Array{T,N})
     
     nel = prod(header.dims; init=1)
 
@@ -370,7 +370,7 @@ end
 function read_and_validate_matfrostarray_header!(io::BufferedStream, ::Type{T}) where {T<:Tuple}
     header = read_matfrostarray_header!(io)
     
-    expected_type = mapped_matlab_type(T)
+    expected_type = matlab_type(T)
 
     nel = prod(header.dims; init=1)
 
@@ -508,7 +508,7 @@ end
 
 @noinline function incompatible_datatypes_exception(::Type{T}, matlabtype::Int32) where {T}
     typename = _typename(T)
-    expectedmatlabtypename = matlab_type_name(mapped_matlab_type(T))
+    expectedmatlabtypename = matlab_type_name(matlab_type(T))
 
     incompatible_datatypes_exception(typename, expectedmatlabtypename, matlabtype)
 end
@@ -668,7 +668,7 @@ end
 
 
 function validate_matfrostarray_type_and_size(io::BufferedStream, ::Type{T}, header::MATFrostArrayHeader) where {T}
-    expected_type = mapped_matlab_type(T)
+    expected_type = matlab_type(T)
 
     if (header.nel != 1)
         discard_matfrostarray_body!(io, header)
@@ -682,7 +682,7 @@ function validate_matfrostarray_type_and_size(io::BufferedStream, ::Type{T}, hea
 end
 
 function validate_matfrostarray_type_and_size(io::BufferedStream, ::Type{T}, header::MATFrostArrayHeader) where {T<:Array}
-    expected_type = mapped_matlab_type(T)
+    expected_type = matlab_type(T)
 
     if (prod(header.dims1; init=1) != header.nel)
         discard_matfrostarray_body!(io, header)

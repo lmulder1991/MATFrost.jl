@@ -1,6 +1,6 @@
 module _Constants
 
-export mapped_matlab_type, matlab_type_name
+export matlab_type, matlab_type_name
 
 export sizeof_matlab_primitive
 
@@ -60,38 +60,41 @@ const SPARSE_COMPLEX_DOUBLE = Int32(31)
 
 
 
-mapped_matlab_type(::Type{T}) where {T} = STRUCT
+matlab_type(::Type{T}) where {T} = STRUCT
 
-mapped_matlab_type(::Type{T}) where {T<:Tuple} = CELL
-mapped_matlab_type(::Type{T}) where {T<:Array{<:Union{Array,Tuple}}} = CELL
+matlab_type(::Type{T}) where {T<:Tuple} = CELL
+matlab_type(::Type{T}) where {T<:Array{<:Union{Array,Tuple}}} = CELL
 
-mapped_matlab_type(::Type{String}) = MATLAB_STRING
+matlab_type(::Type{String}) = MATLAB_STRING
 
-mapped_matlab_type(::Type{Float32}) = SINGLE
-mapped_matlab_type(::Type{Float64}) = DOUBLE
+matlab_type(::Type{Float32}) = SINGLE
+matlab_type(::Type{Float64}) = DOUBLE
 
-mapped_matlab_type(::Type{UInt8})   = UINT8
-mapped_matlab_type(::Type{Int8})    = INT8
-mapped_matlab_type(::Type{UInt16})   = UINT16
-mapped_matlab_type(::Type{Int16})    = INT16
-mapped_matlab_type(::Type{UInt32})   = UINT32
-mapped_matlab_type(::Type{Int32})    = INT32
-mapped_matlab_type(::Type{UInt64})   = UINT64
-mapped_matlab_type(::Type{Int64})    = INT64
+matlab_type(::Type{UInt8})   = UINT8
+matlab_type(::Type{Int8})    = INT8
+matlab_type(::Type{UInt16})   = UINT16
+matlab_type(::Type{Int16})    = INT16
+matlab_type(::Type{UInt32})   = UINT32
+matlab_type(::Type{Int32})    = INT32
+matlab_type(::Type{UInt64})   = UINT64
+matlab_type(::Type{Int64})    = INT64
 
-mapped_matlab_type(::Type{Complex{Float32}}) = COMPLEX_SINGLE
-mapped_matlab_type(::Type{Complex{Float64}}) = COMPLEX_DOUBLE
+matlab_type(::Type{Complex{Float32}}) = COMPLEX_SINGLE
+matlab_type(::Type{Complex{Float64}}) = COMPLEX_DOUBLE
 
-mapped_matlab_type(::Type{Complex{UInt8}})   = COMPLEX_UINT8
-mapped_matlab_type(::Type{Complex{Int8}})    = COMPLEX_INT8
-mapped_matlab_type(::Type{Complex{UInt16}})   = COMPLEX_UINT16
-mapped_matlab_type(::Type{Complex{Int16}})    = COMPLEX_INT16
-mapped_matlab_type(::Type{Complex{UInt32}})   = COMPLEX_UINT32
-mapped_matlab_type(::Type{Complex{Int32}})    = COMPLEX_INT32
-mapped_matlab_type(::Type{Complex{UInt64}})   = COMPLEX_UINT64
-mapped_matlab_type(::Type{Complex{Int64}})    = COMPLEX_INT64
+matlab_type(::Type{Complex{UInt8}})   = COMPLEX_UINT8
+matlab_type(::Type{Complex{Int8}})    = COMPLEX_INT8
+matlab_type(::Type{Complex{UInt16}})   = COMPLEX_UINT16
+matlab_type(::Type{Complex{Int16}})    = COMPLEX_INT16
+matlab_type(::Type{Complex{UInt32}})   = COMPLEX_UINT32
+matlab_type(::Type{Complex{Int32}})    = COMPLEX_INT32
+matlab_type(::Type{Complex{UInt64}})   = COMPLEX_UINT64
+matlab_type(::Type{Complex{Int64}})    = COMPLEX_INT64
 
-mapped_matlab_type(::Type{Array{T, N}}) where {T <: Union{Number, String}, N} = mapped_matlab_type(T)
+matlab_type(::Type{Array{T, N}}) where {T <: Union{Number, String}, N} = matlab_type(T)
+
+
+
 
 
 function matlab_type_name(type::Int32)
