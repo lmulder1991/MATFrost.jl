@@ -5,7 +5,8 @@ using Test
 using ..Types
 using ..BufferPrimitives
 using MATFrost._Stream: BufferedStream
-using MATFrost._Read2: read_matfrostarray!
+using MATFrost._Read: read_matfrostarray!
+using MATFrost._Convert: convert_matfrostarray
 
 struct StructTest1
     a::Float64
@@ -75,8 +76,10 @@ end
     v = StructTest1(3.0, 3, "Test1234")
     _writebuffermatfrostarray!(stream, v)
     stream.available += 20
-    @test read_matfrostarray!(stream, StructTest1).x.x == v
+
+    marr = read_matfrostarray!(stream)
     @test stream.available - stream.position == 20
+    @test convert_matfrostarray(StructTest1, marr) == v
 end
 
 
@@ -89,9 +92,14 @@ end
     arr = StructTest1[v1, v2, v3, v1, v3, v2]
     _writebuffermatfrostarray!(stream, arr)
     stream.available += 20
-    @test read_matfrostarray!(stream, Vector{StructTest1}).x.x == arr
+
+
+    marr = read_matfrostarray!(stream)
     @test stream.available - stream.position == 20
+    @test convert_matfrostarray(Vector{StructTest1}, marr) == arr
 end
+
+# println(result)
 
 
 
@@ -100,8 +108,12 @@ end
     v = (3223,3.0,3,"EWFW")
     _writebuffermatfrostarray!(stream, v)
     stream.available += 20
-    @test read_matfrostarray!(stream, Tuple{Int64, Float64, Int64, String}).x.x == v
+
+    
+    marr = read_matfrostarray!(stream)    
     @test stream.available - stream.position == 20
+    @test convert_matfrostarray(Tuple{Int64, Float64, Int64, String}, marr) == v
+
 end
 
 @testset "Vector of tuple" begin
@@ -113,8 +125,11 @@ end
     arr = Tuple{Int64, Float64, Int64, String}[v1, v2, v3, v1, v3, v2]
     _writebuffermatfrostarray!(stream, arr)
     stream.available += 20
-    @test read_matfrostarray!(stream, Vector{Tuple{Int64, Float64, Int64, String}}).x.x == arr
+
+    
+    marr = read_matfrostarray!(stream)  
     @test stream.available - stream.position == 20
+    @test convert_matfrostarray(Vector{Tuple{Int64, Float64, Int64, String}}, marr) == arr
 end
 
 
@@ -124,8 +139,10 @@ end
     v = NT((3223,3.0,3,"EWFW"))
     _writebuffermatfrostarray!(stream, v)
     stream.available += 20
-    @test read_matfrostarray!(stream, NT).x.x == v
-    @test stream.available - stream.position == 20
+    
+    marr = read_matfrostarray!(stream)
+    @test stream.available - stream.position == 20  
+    @test convert_matfrostarray(NT, marr) == v
 end
 
 @testset "Vector of NamedTuple" begin
@@ -138,8 +155,10 @@ end
     arr = NT[v1, v2, v3, v1, v3, v2]
     _writebuffermatfrostarray!(stream, arr)
     stream.available += 20
-    @test read_matfrostarray!(stream, Vector{NT}).x.x == arr
+    
+    marr = read_matfrostarray!(stream)
     @test stream.available - stream.position == 20
+    @test convert_matfrostarray(Vector{NT}, marr) == arr
 end
 
 
@@ -162,9 +181,11 @@ end
 
     _writebuffermatfrostarray!(stream, nest)
     stream.available += 20
-    presult = read_matfrostarray!(stream, StructTest3).x.x
-    @test deepequal(presult, nest)
+    
+    marr = read_matfrostarray!(stream)
     @test stream.available - stream.position == 20
+    presult = convert_matfrostarray(StructTest3, marr)
+    @test deepequal(presult, nest)
 end
 
 end

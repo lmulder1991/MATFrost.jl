@@ -7,9 +7,9 @@ using JET
 include("types.jl")
 include("readwrite.jl")
 # include("primitives.jl")
-# include("composites.jl")
+include("composites.jl")
 # include("incompatible_datatypes.jl")
-include("read.jl")
+# include("read.jl")
 # stream = MATFrost._Stream.BufferedStream(C_NULL, Vector{UInt8}(undef, 2 << 16), 0, 0)
 
 

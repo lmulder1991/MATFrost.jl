@@ -70,10 +70,16 @@ Convert to Tuples
         if marr isa MATFrostArrayCell
             validate_array_dimensions(T, marr)
 
-            T($(
-                :(convert_matfrostarray($(fieldtype(T, fi)), marr.values[$fi]))
-                for fi in fieldcount(T)
-            )...,)
+            T(($((
+                quote
+                    try
+                        convert_matfrostarray($(fieldtype(T, fi)), marr.values[$fi])
+                    catch e
+                        rethrow(e)
+                    end
+                end
+                for fi in 1:fieldcount(T)
+            )...),))
 
         else
             throw(incompatible_datatypes_exception(T, marr))
@@ -90,13 +96,15 @@ Convert to structs/namedtuples
         if marr isa MATFrostArrayStruct
             validate_array_dimensions(T, marr)
             validate_fieldnames(T, marr)     
-            convert_matfrostarray_struct_object(marr, 1, T)
+            convert_matfrostarray_struct_object(T, marr, 1)
         else
             throw(incompatible_datatypes_exception(T, marr))
         end
 
     end
 end
+
+empty_array(::Type{Array{T,N}}) where {T,N} = Array{T,N}(undef, ntuple(_-> 0, Val{N}()))
 
 """
 Convert to arrays of structs/namedtuples
@@ -105,20 +113,20 @@ Convert to arrays of structs/namedtuples
     quote
         if marr isa MATFrostArrayStruct
             validate_array_dimensions(Array{T,N}, marr)
-            validate_fieldnames(marr, T)     
+            validate_fieldnames(T, marr)     
 
             dims = array_dims(marr.dims, Val{N}())
             arr = Array{T,N}(undef, dims)
             for i in eachindex(arr)
                 try
-                    arr[i] = convert_matfrostarray_struct_object(marr, i, T)
+                    arr[i] = convert_matfrostarray_struct_object(T, marr, i)
                 catch e
                     rethrow(e)
                 end
             end
             return arr
         elseif marr isa MATFrostArrayEmpty
-            return Array{T,N}(undef, ntuple(_-> 0, Val{N}()))
+            return empty_array(Array{T,N})
         else
             throw(incompatible_datatypes_exception(Array{T,N}, marr))
         end
@@ -145,7 +153,7 @@ Convert to arrays of arrays/tuples
             end
             return arr
         elseif marr isa MATFrostArrayEmpty
-            return Array{T,N}(undef, ntuple(_-> 0, Val{N}()))
+            return empty_array(Array{T,N})
         else
             throw(incompatible_datatypes_exception(Array{T,N}, marr))
         end
@@ -175,33 +183,34 @@ Convert single struct object
 """
 @generated function convert_matfrostarray_struct_object(::Type{T}, marr::MATFrostArrayStruct, i::Int64) where {T}
 quote
-    T($(
+    T($((
         quote 
             try
-                convert_matfrostarray(get_matfrostarray_element(marr, fieldname(T, $fi), i), $(fieldtype(T, fi)))
+                convert_matfrostarray($(fieldtype(T, fi)), get_matfrostarray_element(marr, fieldname(T, $fi), i))
             catch e
                 rethrow(e)
             end
-        end
-    )...,)
+        end for fi in 1:fieldcount(T)
+    )...),)
 end   
 end
+
+
 
 """
 Convert single namedtuple object
 """
 @generated function convert_matfrostarray_struct_object(::Type{T}, marr::MATFrostArrayStruct, i::Int64) where {T<:NamedTuple}
 quote
-    T(($(
+    T(($((
         quote 
             try
-                convert_matfrostarray(get_matfrostarray_element(marr, fieldname(T, $fi), i), $(fieldtype(T, fi)))
+                convert_matfrostarray($(fieldtype(T, fi)), get_matfrostarray_element(marr, fieldname(T, $fi), i))
             catch e
                 rethrow(e)
             end
-        end
-        for fi in fieldcount(T)
-    )...,))
+        end for fi in 1:fieldcount(T)
+    )...),))
 end   
 end
 
@@ -233,7 +242,8 @@ end
 Scalar array dimension validation
 """
 function validate_array_dimensions(::Type{T}, marr::MATFrostArrayAbstract) where {T}
-    if length(marr.values) != 1
+    nel = prod(marr.dims;init=1)
+    if nel != 1
         throw(not_scalar_value_exception(T, marr.dims))
     end
     nothing
