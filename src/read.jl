@@ -1,35 +1,10 @@
-module _Read2
+module _Read
 
 import ..MATFrost._Stream: read!, write!, flush!, BufferedStream, discard!
 using .._Types
 using .._Constants
 
 
-abstract type MATFrostArrayAbstract end
-
-struct MATFrostArrayEmpty <: MATFrostArrayAbstract
-end
-
-struct MATFrostArrayPrimitive{T<:Number} <: MATFrostArrayAbstract
-    dims::Vector{Int64}
-    values::Vector{T}
-end
-
-struct MATFrostArrayString <: MATFrostArrayAbstract
-    dims::Vector{Int64}
-    values::Vector{String}
-end
-
-struct MATFrostArrayCell <: MATFrostArrayAbstract
-    dims::Vector{Int64}
-    values::Vector{MATFrostArrayAbstract}
-end
-
-struct MATFrostArrayStruct <: MATFrostArrayAbstract
-    dims::Vector{Int64}
-    fieldnames::Vector{Symbol}
-    values::Vector{MATFrostArrayAbstract}
-end
 
 struct MATFrostArrayHeader
     type :: Int32

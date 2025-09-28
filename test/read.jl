@@ -1,13 +1,16 @@
 module ReadTest
-using MATFrost: MATFrost,  _Stream.BufferedStream as BufferedStream, 
-    MATFrost._Read2.read_matfrostarray! as read_matfrostarray!, 
-    MATFrost._Types
-    
+
 using Test
 using JET
 
-include("types.jl")
-include("readwrite.jl")
+using ..Types
+using ..BufferPrimitives
+
+using MATFrost: MATFrost
+using MATFrost._Read: read_matfrostarray!
+using MATFrost._Stream: BufferedStream
+using MATFrost._Types
+
 
 """
 Scalar: Number, String
@@ -41,8 +44,6 @@ function deepequal(a, b)
     return true
 end
 
-stream = MATFrost._Stream.BufferedStream(C_NULL, Vector{UInt8}(undef, 2 << 16), 0, 0)
-
 
 stream = BufferedStream(C_NULL, Vector{UInt8}(undef, 2 << 16), 0, 0)
 
@@ -72,7 +73,9 @@ primitive_tests = (
         v_act = read_matfrostarray!(stream)
         v_exp = MATFrostArrayPrimitive{pt[1]}([1], [pt[2]])
 
-        @test deepequal(v_act, v_exp)
+        println(v_act)
+        println(v_exp)
+        @test deepequal(v_act, v_exp) == true
         @test stream.available - stream.position == 20
     end
 
@@ -84,7 +87,8 @@ primitive_tests = (
 
         v_act = read_matfrostarray!(stream)
         v_exp = MATFrostArrayPrimitive{Complex{pt[1]}}([1], [v])
-        @test deepequal(v_act, v_exp)
+        iseq = deepequal(v_act, v_exp)
+        @test iseq
         @test stream.available - stream.position == 20
     end
 
@@ -97,7 +101,8 @@ primitive_tests = (
         
         v_act = read_matfrostarray!(stream)
         v_exp = MATFrostArrayPrimitive{pt[1]}([3], arr)
-        @test deepequal(v_act, v_exp)
+        iseq = deepequal(v_act, v_exp)
+        @test iseq
         @test stream.available - stream.position == 20
 
     end
@@ -112,7 +117,8 @@ primitive_tests = (
         
         v_act = read_matfrostarray!(stream)
         v_exp = MATFrostArrayPrimitive{Complex{pt[1]}}([3], arr)
-        @test deepequal(v_act, v_exp)
+        iseq = deepequal(v_act, v_exp)
+        @test iseq
         @test stream.available - stream.position == 20
 
     end
@@ -129,7 +135,8 @@ primitive_tests = (
         
         v_act = read_matfrostarray!(stream)
         v_exp = MATFrostArrayPrimitive{pt[1]}([7, 5], vec(arr))
-        @test deepequal(v_act, v_exp)
+        iseq = deepequal(v_act, v_exp)
+        @test iseq
         @test stream.available - stream.position == 20
         
     end
@@ -146,7 +153,8 @@ primitive_tests = (
         
         v_act = read_matfrostarray!(stream)
         v_exp = MATFrostArrayPrimitive{Complex{pt[1]}}([5, 7], vec(arr))
-        @test deepequal(v_act, v_exp)
+        iseq = deepequal(v_act, v_exp)
+        @test iseq
         @test stream.available - stream.position == 20
         
     end

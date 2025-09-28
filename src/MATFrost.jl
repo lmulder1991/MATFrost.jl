@@ -20,7 +20,7 @@ include("stream.jl")
 
 include("read.jl")
 include("convert.jl")
-include("read2.jl")
+include("read_old.jl")
 include("write.jl")
 include("install.jl")
 

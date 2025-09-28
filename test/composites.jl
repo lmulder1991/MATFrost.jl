@@ -1,4 +1,11 @@
 
+module CompositeTests
+
+using Test
+using ..Types
+using ..BufferPrimitives
+using MATFrost._Stream: BufferedStream
+using MATFrost._Read2: read_matfrostarray!
 
 struct StructTest1
     a::Float64
@@ -158,4 +165,6 @@ end
     presult = read_matfrostarray!(stream, StructTest3).x.x
     @test deepequal(presult, nest)
     @test stream.available - stream.position == 20
+end
+
 end

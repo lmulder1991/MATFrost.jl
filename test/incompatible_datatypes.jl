@@ -1,9 +1,21 @@
 
 
+module IncompatiableDataTypesTest
+
+using Test
+using ..Types
+using ..BufferPrimitives
+using MATFrost._Stream: BufferedStream
+using MATFrost._Read2: read_matfrostarray!
+using MATFrost._Types
 
 stream = BufferedStream(C_NULL, Vector{UInt8}(undef, 2 << 16), 0, 0)
 
-
+struct StructTest1
+    a::Float64
+    b::Int64
+    d::String
+end
 
 primitive_tests = (
     (Float32, Float32(4321)),
@@ -58,5 +70,7 @@ primitive_tests = (
         end
     end
 
+
+end
 
 end

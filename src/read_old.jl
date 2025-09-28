@@ -1,4 +1,4 @@
-module _Read
+module _Read2
 
 import ..MATFrost._Stream: read!, write!, flush!, BufferedStream, discard!
 using .._Types

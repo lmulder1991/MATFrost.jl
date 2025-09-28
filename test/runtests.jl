@@ -1,10 +1,11 @@
 
-using MATFrost: MATFrost,  _Stream.BufferedStream as BufferedStream, _Read.read_matfrostarray! as read_matfrostarray!, MATFrost._MATFrostException as MATFrostException
+using MATFrost: MATFrost,  _Stream.BufferedStream as BufferedStream, _Read2.read_matfrostarray! as read_matfrostarray!
+using MATFrost._Types
 using Test
 using JET
 
-# include("types.jl")
-# include("readwrite.jl")
+include("types.jl")
+include("readwrite.jl")
 # include("primitives.jl")
 # include("composites.jl")
 # include("incompatible_datatypes.jl")

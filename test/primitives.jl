@@ -2,6 +2,13 @@
 # stream = MATFrost._Stream.BufferedStream(C_NULL, Vector{UInt8}(undef, 2 << 16), 0, 0)
 
 
+module PrimitiveTests
+
+using Test
+using ..Types
+using ..BufferPrimitives
+using MATFrost._Stream: BufferedStream
+using MATFrost._Read2: read_matfrostarray!
 
 
 stream = BufferedStream(C_NULL, Vector{UInt8}(undef, 2 << 16), 0, 0)
@@ -95,6 +102,8 @@ end
     @test stream.available - stream.position == 20
 end
 
+
+end
 
 # @testset "Primitives-JET-Opt" begin
 #     @testset "JET-Opt" begin

@@ -1,3 +1,9 @@
+module BufferPrimitives
+
+export _writebuffer!, _writebuffermatfrostarray!, _readbuffer!, _clearbuffer!
+
+using ..Types
+using MATFrost._Stream: BufferedStream
 
 
 """
@@ -154,4 +160,6 @@ end
 function _clearbuffer!(io)
     io.position = 0
     io.available =0 
+end
+
 end
