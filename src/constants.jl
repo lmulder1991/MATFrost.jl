@@ -66,6 +66,9 @@ matlab_type(::Type{T}) where {T} = STRUCT
 matlab_type(::Type{T}) where {T<:Tuple} = CELL
 matlab_type(::Type{T}) where {T<:Array{<:Union{Array,Tuple}}} = CELL
 
+
+matlab_type(::Type{Bool}) = LOGICAL
+
 matlab_type(::Type{String}) = MATLAB_STRING
 
 matlab_type(::Type{Float32}) = SINGLE
@@ -110,6 +113,9 @@ matlab_type(::MATFrostArrayPrimitive{T}) where {T} = matlab_type(T)
     elseif marr isa MATFrostArrayString
         matlab_type(marr)
     elseif marr isa MATFrostArrayCell
+        matlab_type(marr)
+
+    elseif marr isa MATFrostArrayPrimitive{Bool}
         matlab_type(marr)
 
     elseif marr isa MATFrostArrayPrimitive{Float64}
