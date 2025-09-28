@@ -397,10 +397,10 @@ end
 end
 
 
-@noinline function missing_fields_exception(typename::String, fieldnames::Vector{Symbol}, fieldtypenames::Vector{String}, fieldnames_mat::Vector{Symbol})
-    missingfields  = ("    $(fn)\n" for fn in fieldnames if !(fn in fieldnames_mat))
+@noinline function missing_fields_exception(typename::String, fieldnames_jl::Vector{Symbol}, fieldtypenames::Vector{String}, fieldnames_mat::Vector{Symbol})
+    missingfields  = ("    $(fn)\n" for fn in fieldnames_jl if !(fn in fieldnames_mat))
     actualfields   = ("    $(fn)\n"  for fn in fieldnames_mat)
-    expectedfields = ("    $(fn)::$(ftn)\n" for (fn, ftn)  in zip(fieldnames, fieldtypenames))
+    expectedfields = ("    $(fn)::$(ftn)\n" for (fn, ftn)  in zip(fieldnames_jl, fieldtypenames))
 
   MATFrostException(
         "matfrostjulia:conversion:missingFields",
