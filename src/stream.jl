@@ -14,7 +14,7 @@ mutable struct BufferedStream
     available::Int64
 end
 
-function flush!(io::BufferedStream)  
+@noinline function flush!(io::BufferedStream)  
     byteswritten = Ref{UInt32}()
     while (io.available > io.position) 
 
@@ -32,7 +32,7 @@ function flush!(io::BufferedStream)
     nothing
 end
 
-function write!(io::BufferedStream, data::Ptr{UInt8}, nb::Int64)
+@noinline function write!(io::BufferedStream, data::Ptr{UInt8}, nb::Int64)
 
     bw = min(length(io.buffer) - io.available, nb);
     Base.memcpy(pointer(io.buffer) + io.available, data, bw);
@@ -63,7 +63,7 @@ function write!(io::BufferedStream, data::Ptr{UInt8}, nb::Int64)
     nothing
 end
 
-function write!(io::BufferedStream, v::T) where {T<:Number}
+@noinline function write!(io::BufferedStream, v::T) where {T<:Number}
     if (length(io.buffer) - io.available > sizeof(T))
         unsafe_store!(reinterpret(Ptr{T}, pointer(io.buffer) + io.available), v)
         io.available += sizeof(T)
@@ -75,20 +75,21 @@ function write!(io::BufferedStream, v::T) where {T<:Number}
 end
 
 
-function write!(io::BufferedStream, arr::Array{T}) where {T<:Number}
+@noinline function write!(io::BufferedStream, arr::Array{T}) where {T<:Number}
     write!(io, reinterpret(Ptr{UInt8}, pointer(arr)), sizeof(T)*length(arr))
     nothing
 end
 
 
-function write!(io::BufferedStream, v::String)
+@noinline function write!(io::BufferedStream, v::String)
     nb = ncodeunits(v)
     write!(io, Int64(nb))
     write!(io, pointer(v), nb)
+    nothing
 end
 
 
-function read!(io::BufferedStream, data::Ptr{UInt8}, nb::Int64)
+@noinline function read!(io::BufferedStream, data::Ptr{UInt8}, nb::Int64)
     br = 0
     while (br < nb)
         if (io.available - io.position > 0) 
@@ -126,14 +127,12 @@ function read!(io::BufferedStream, data::Ptr{UInt8}, nb::Int64)
 end
 
 
-function read!(io::BufferedStream, arr::Array{T}) where {T <: Number}
+@noinline function read!(io::BufferedStream, arr::Array{T}) where {T <: Number}
     read!(io, reinterpret(Ptr{UInt8}, pointer(arr)), sizeof(T) * length(arr))
-    nothing
+    arr
 end
 
-
-
-function read!(io::BufferedStream, ::Type{T}) :: T where {T <: Number}
+@noinline function read!(io::BufferedStream, ::Type{T}) :: T where {T <: Number}
     if io.available - io.position >= sizeof(T)
         v = unsafe_load(reinterpret(Ptr{T}, pointer(io.buffer) + io.position))
         io.position += sizeof(T)
@@ -145,10 +144,16 @@ function read!(io::BufferedStream, ::Type{T}) :: T where {T <: Number}
     end
 end
 
+@noinline function read!(io::BufferedStream, ::Type{String}) :: String
+    nb = read!(io, Int64)
+    sarr = Vector{UInt8}(undef, nb)
+    read!(io, sarr)
+    transcode(String, sarr)
+end
 
 const CLEAR_BUFFER = Vector{UInt8}(undef, 2 << 14) # This buffer is used to clear the MATFrost object transmitted over the PIPE.
 
-function discard!(io::BufferedStream, nb::Int64)
+@noinline function discard!(io::BufferedStream, nb::Int64)
     br = 0
     lbuf = length(CLEAR_BUFFER)
     pbuf = pointer(CLEAR_BUFFER)
@@ -157,6 +162,7 @@ function discard!(io::BufferedStream, nb::Int64)
         read!(io, pbuf, brn)
         br += brn
     end
+    nothing
 end
 
 
