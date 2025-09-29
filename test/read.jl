@@ -64,114 +64,87 @@ primitive_tests = (
     
 )
 
-@testset "Primitives-Behavior-$(pt[1])" for pt in primitive_tests 
-    
+function test_matfrostarray_read(v_write, v_exp)
+    _clearbuffer!(stream)
+    _writebuffermatfrostarray!(stream, v_write)
+    stream.available += 20
+
+    v_act = read_matfrostarray!(stream)
+
+    t_nb_read = stream.available - stream.position == 20
+    t_v_correct = deepequal(v_act, v_exp)
+    return t_nb_read && t_v_correct
+end
+
+@testset "Primitives-Behavior-Boolean" begin
     @testset "Read-Scalar" begin
-        _clearbuffer!(stream)
-        _writebuffermatfrostarray!(stream, pt[2])
-        stream.available += 20
-        v_act = read_matfrostarray!(stream)
-        v_exp = MATFrostArrayPrimitive{pt[1]}([1], [pt[2]])
-
-        println(v_act)
-        println(v_exp)
-        @test deepequal(v_act, v_exp) == true
-        @test stream.available - stream.position == 20
-    end
-
-    @testset "Read-ComplexScalar" begin
-        _clearbuffer!(stream)
-        v = Complex{pt[1]}(pt[2], pt[1](2) * pt[2])
-        _writebuffermatfrostarray!(stream, v)
-        stream.available += 20
-
-        v_act = read_matfrostarray!(stream)
-        v_exp = MATFrostArrayPrimitive{Complex{pt[1]}}([1], [v])
-        iseq = deepequal(v_act, v_exp)
-        @test iseq
-        @test stream.available - stream.position == 20
+        v_write = true
+        v_exp = MATFrostArrayPrimitive{Bool}([1], [true])
+        @test test_matfrostarray_read(v_write, v_exp)
     end
 
     @testset "Read-Vector" begin
-        _clearbuffer!(stream)
-        arr = pt[1][pt[2], pt[2]+1, pt[2]+2]
-        _writebuffermatfrostarray!(stream, arr)
-        stream.available += 20
+        v_write = [true, false, true]
+        v_exp = MATFrostArrayPrimitive{Bool}([3], v_write)
+        @test test_matfrostarray_read(v_write, v_exp)
+    end
 
-        
-        v_act = read_matfrostarray!(stream)
-        v_exp = MATFrostArrayPrimitive{pt[1]}([3], arr)
-        iseq = deepequal(v_act, v_exp)
-        @test iseq
-        @test stream.available - stream.position == 20
+    
+    @testset "Read-Matrix" begin
+        v_write = [true false true; false false true; false false false]
+        v_exp = MATFrostArrayPrimitive{Bool}([3,3], vec(v_write))
+        @test test_matfrostarray_read(v_write, v_exp)
+    end
+end
+
+
+@testset "Primitives-Behavior-$(pt[1])" for pt in primitive_tests 
+    
+    @testset "Read-Scalar" begin
+        v_write = pt[2]
+        v_exp = MATFrostArrayPrimitive{pt[1]}([1], [pt[2]])
+        @test test_matfrostarray_read(v_write, v_exp)
+    end
+
+    @testset "Read-ComplexScalar" begin
+        v_write = Complex{pt[1]}(pt[2], pt[1](2) * pt[2])
+        v_exp = MATFrostArrayPrimitive{Complex{pt[1]}}([1], [v_write])
+        @test test_matfrostarray_read(v_write, v_exp)
+    end
+
+    @testset "Read-Vector" begin        
+        v_write = pt[1][pt[2], pt[2]+1, pt[2]+2]
+        v_exp = MATFrostArrayPrimitive{pt[1]}([3], v_write)
+        @test test_matfrostarray_read(v_write, v_exp)
 
     end
 
     @testset "Read-ComplexVector" begin
-        _clearbuffer!(stream)
         v = Complex{pt[1]}(pt[2], pt[1](2) * pt[2])
-        arr= Complex{pt[1]}[v + 1, v+2, v+3]
-        _writebuffermatfrostarray!(stream, arr)
-        stream.available += 20
-
-        
-        v_act = read_matfrostarray!(stream)
-        v_exp = MATFrostArrayPrimitive{Complex{pt[1]}}([3], arr)
-        iseq = deepequal(v_act, v_exp)
-        @test iseq
-        @test stream.available - stream.position == 20
-
+        v_write= Complex{pt[1]}[v + 1, v+2, v+3]
+        v_exp = MATFrostArrayPrimitive{Complex{pt[1]}}([3], v_write)
+        @test test_matfrostarray_read(v_write, v_exp)
     end
 
     @testset "Read-Matrix" begin
-        _clearbuffer!(stream)
-        arr = Matrix{pt[1]}(undef, (7,5))
-        for i in eachindex(arr)
-            arr[i] = pt[2] + pt[1](i)
+        v_write = Matrix{pt[1]}(undef, (7,5))
+        for i in eachindex(v_write)
+            v_write[i] = pt[2] + pt[1](i)
         end
-        _writebuffermatfrostarray!(stream, arr)
-        stream.available += 20
-
-        
-        v_act = read_matfrostarray!(stream)
-        v_exp = MATFrostArrayPrimitive{pt[1]}([7, 5], vec(arr))
-        iseq = deepequal(v_act, v_exp)
-        @test iseq
-        @test stream.available - stream.position == 20
-        
+        v_exp = MATFrostArrayPrimitive{pt[1]}([7, 5], vec(v_write))
+        @test test_matfrostarray_read(v_write, v_exp)
     end
 
     @testset "Read-ComplexMatrix" begin
-        _clearbuffer!(stream)
-        arr = Matrix{Complex{pt[1]}}(undef, (5,7))
-        for i in eachindex(arr)
-            arr[i] = Complex{pt[1]}(pt[2], pt[1](i)+3)
+        v_write = Matrix{Complex{pt[1]}}(undef, (5,7))
+        for i in eachindex(v_write)
+            v_write[i] = Complex{pt[1]}(pt[2], pt[1](i)+3)
         end
-        _writebuffermatfrostarray!(stream, arr)
-        stream.available += 20
-
-        
-        v_act = read_matfrostarray!(stream)
-        v_exp = MATFrostArrayPrimitive{Complex{pt[1]}}([5, 7], vec(arr))
-        iseq = deepequal(v_act, v_exp)
-        @test iseq
-        @test stream.available - stream.position == 20
-        
+        v_exp = MATFrostArrayPrimitive{Complex{pt[1]}}([5, 7], vec(v_write))
+        @test test_matfrostarray_read(v_write, v_exp)
     end
     
 
 end
-
-
-
-# _writebuffermatfrostarray!(stream, Int64[1,2,3])
-
-# v_act = read_matfrostarray!(stream)
-# v_exp = MATFrostArrayPrimitive{Int64}(Int64[3], [1,2,3])
-# println(v_act)
-# println(v_exp)
-
-# println(deepequal(v_act, v_exp))
-
 
 end

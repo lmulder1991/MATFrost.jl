@@ -143,6 +143,8 @@ expected_matlab_type_name(::Type{T}) where {T<:Array{<:Union{Array,Tuple}}} = "c
 
 expected_matlab_type_name(::Type{String}) = "string"
 
+expected_matlab_type_name(::Type{Bool}) = "logical"
+
 expected_matlab_type_name(::Type{Float32}) = "single"
 expected_matlab_type_name(::Type{Float64}) = "double"
 
@@ -178,6 +180,8 @@ expected_matlab_type(::Type{T}) where {T<:Tuple} = CELL
 expected_matlab_type(::Type{T}) where {T<:Array{<:Union{Array,Tuple}}} = CELL
 
 expected_matlab_type(::Type{String}) = MATLAB_STRING
+
+expected_matlab_type(::Type{Bool}) = LOGICAL
 
 expected_matlab_type(::Type{Float32}) = SINGLE
 expected_matlab_type(::Type{Float64}) = DOUBLE

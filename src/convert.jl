@@ -18,14 +18,14 @@ end
 function convert_matfrostarray(::Type{Array{T,N}}, @nospecialize(marr::MATFrostArrayAbstract))::Array{T,N} where {T<:Number, N}
     if marr isa MATFrostArrayPrimitive{T}
         validate_array_dimensions(Array{T,N}, marr)
-        if N == 1
+        if marr.values isa Array{T,N}
             return marr.values
         else
             dims = array_dims(marr.dims, Val{N}())
             return reshape(marr.values, dims)
         end
     elseif marr isa MATFrostArrayEmpty
-        return Array{T,N}(undef, ntuple(_-> 0, Val{N}()))
+        return empty_array(Array{T,N})
     else
         throw(incompatible_datatypes_exception(Array{T,N}, marr))
     end
@@ -56,7 +56,7 @@ function convert_matfrostarray(::Type{Array{String,N}}, @nospecialize(marr::MATF
             return reshape(marr.values, dims)
         end
     elseif marr isa MATFrostArrayEmpty
-        return Array{String,N}(undef, ntuple(_-> 0, Val{N}()))
+        return empty_array(Array{String,N})
     else
         throw(incompatible_datatypes_exception(Array{String,N}, marr))
     end
@@ -77,8 +77,7 @@ Convert to Tuples
                     catch e
                         rethrow(e)
                     end
-                end
-                for fi in 1:fieldcount(T)
+                end for fi in 1:fieldcount(T)
             )...),))
 
         else
