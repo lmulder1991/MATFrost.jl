@@ -20,11 +20,12 @@ include("stream.jl")
 
 include("read.jl")
 include("convert.jl")
-include("read_old.jl")
 include("write.jl")
 include("install.jl")
 
 include("server.jl")
+
+include("example.jl")
 
 
 
