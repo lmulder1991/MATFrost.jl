@@ -11,29 +11,26 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
 % - Julia runs in its own mexhost process.
 
     properties (SetAccess=immutable)
-        environment       (1,1) string = fullfile(fileparts(fileparts(mfilename("fullpath"))), "{{ relative_environment }}")
         julia             (1,1) string
     end
 
     properties (Access=private)
-        namespace         (:,1) string = []
+        id                (1,1) uint64
         matfrostjuliacall (1,1) string
         mh                     matlab.mex.MexHost
+        project           (1,1) string
     end
 
     methods
         function obj = matfrostjulia(argstruct)
             arguments                
                 argstruct.version     (1,1) string
-                    % The version of Julia to use. i.e. 1.10 (Juliaup channel)
+                    % The version of Julia to use. i.e. 1.12 (Juliaup channel)
                 argstruct.bindir      (1,1) string {mustBeFolder}
-                    % The directory where the Julia environment is located.
+                    % The directory where the Julia binary is located.
                     % This will overrule the version specification.
                     % NOTE: Only needed if version is not specified.
                 argstruct.project     (1,1) string = ""
-                argstruct.instantiate (1,1) logical = false
-                    % Resolve project environment
-
             end
             
             if isfield(argstruct, 'bindir')
@@ -55,33 +52,49 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
                 error("matfrostjulia:osNotSupported", "MacOS not supported yet.");
             end
 
-            if argstruct.instantiate
-                environmentinstantiate(obj.julia, obj.environment);
-            end
-            
-            matv = regexp(version, "R20\d\d[ab]", "match");
-            matv = matv{1};
-            obj.matfrostjuliacall = "matfrostjuliacall_r" + string(matv(2:end));
+            obj.project = argstruct.project;
+
             
             
-            obj.spawn_mexhost();
+            obj.spawn_server();
 
 
         end
+
+
     end
 
     methods (Access=private)
-        function obj = spawn_mexhost(obj)
-            if ispc
-                obj.mh = mexhost("EnvironmentVariables", [...
-                    "JULIA_PROJECT", obj.environment;
-                    "PATH",          fileparts(obj.julia)]);
-            elseif isunix
-                obj.mh = mexhost("EnvironmentVariables", [...
-                    "JULIA_PROJECT",   obj.environment;
-                    "PATH",            fileparts(obj.julia); 
-                    "LD_LIBRARY_PATH", fullfile(fileparts(fileparts(obj.julia)), "lib")]);
+        function obj = spawn_server(obj)
+
+            obj.id = uint64(randi(1e9, 'int32'));
+            obj.mh = mexhost();
+
+            if ~isempty(obj.project)
+                project = sprintf("--project=""%s""", obj.project);
+            else
+                project = "";
             end
+
+            bootstrap = fullfile(fileparts(mfilename("fullpath")), "bootstrap.jl");
+
+            createstruct = struct;
+            createstruct.id = obj.id;
+            createstruct.action = "CREATE";
+            createstruct.cmdline = sprintf("""%s"" %s ""%s""", obj.julia, project, bootstrap);
+         
+            obj.mh.feval("matfrostjuliacall", createstruct);
+
+        
+        end
+
+        function delete(obj)
+            
+            destroystruct = struct;
+            destroystruct.id = obj.id;
+            destroystruct.action = "DESTROY";
+
+            obj.mh.feval("matfrostjuliacall", destroystruct);
         end
     end
    
@@ -90,36 +103,20 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
             % Calls into the loaded julia package.
             
             if indexOp(end).Type ~= matlab.indexing.IndexingOperationType.Paren
-                 for i = 1:length(indexOp)
-                    obj.namespace(end+1) = indexOp(i).Name; 
-                 end
-                varargout{1} = obj;
-                return;
+                throw(MException("matfrostjulia:missingCall"));
             end
-            
-            ns = obj.namespace;
-            for i = 1:(length(indexOp)-2)
-                ns(end+1) = indexOp(i).Name; 
-            end
-            
-            functionname = indexOp(end-1).Name;
 
-
+            fully_qualified_name_arr = arrayfun(@(in) string(in.Name), indexOp(1:end-1));
+             
             args = indexOp(end).Indices;
 
-            callstruct.package = string(ns(1));
-            callstruct.func    = string(functionname);
+            callstruct.id = obj.id;
+            callstruct.action = "CALL";
+            callstruct.fully_qualified_name = join(fully_qualified_name_arr, ".");
             callstruct.args    = args(:);
 
-            try
-                jlo = obj.mh.feval(obj.matfrostjuliacall, callstruct);
-            catch ME
-                if (strcmp(ME.identifier, "MATLAB:mex:MexHostCrashed"))
-                    obj.spawn_mexhost();
-                end
-                rethrow(ME)
-            end
-
+            jlo = obj.mh.feval("matfrostjuliacall", callstruct);
+            
             varargout{1} = jlo;
         end
 
