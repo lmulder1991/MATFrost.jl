@@ -2,9 +2,12 @@ module _Server
 
 import ..MATFrost as MATFrost
 import ..MATFrost._Stream: BufferedStream
-import ..MATFrost._Read: read_matfrostarray_header!, read_matfrostarray!, discard_matfrostarray!, Ok, Err, CELL
+import ..MATFrost._Read:  read_matfrostarray!
 import ..MATFrost._Write: write_matfrostarray!
 import ..MATFrost._Stream: flush!
+using ..MATFrost._Types
+using ..MATFrost._Constants
+using ..MATFrost._Convert: convert_matfrostarray
 
 struct CallMeta
     fully_qualified_name::String
@@ -22,11 +25,12 @@ function getfunction(meta::CallMeta)
     syms = Symbol.(eachsplit(meta.fully_qualified_name,"."))
 
     if length(syms) < 2
-        return nothing
+        throw("Incompatible fully_qualified_name")
     end
     
     packagename = syms[1]
     package = nothing
+    
     try
         package = getfield(Main, packagename)
     catch _
@@ -34,7 +38,7 @@ function getfunction(meta::CallMeta)
             Main.eval(:(import $packagename))
             package = getfield(Main, packagename)
         catch _
-            return nothing
+            throw("Package not found")
         end
     end
 
@@ -43,12 +47,12 @@ function getfunction(meta::CallMeta)
         try
             f = getfield(f, syms[i])
         catch _
-            return nothing
+            throw("Function not found")
         end
     end
 
     if length(methods(f)) != 1
-        return nothing
+        throw("Multiple methods for function defintion found")
     end
 
     return f
@@ -64,48 +68,36 @@ function matfrostexceptionresult(id, message)
 end
 
 function callsequence(matfrostin::BufferedStream, matfrostout::BufferedStream)
-    header = read_matfrostarray_header!(matfrostin)
-    
-    if header.type != CELL || prod(header.dims) != 2
-        # This should in theory not happen.
-        discard_matfrostarray_body!(matfrostin, header)
-        write_matfrostarray!(matfrostout, matfrostexceptionresult("", "error"))
-        return
-    end
 
-    meta = read_matfrostarray!(matfrostin, CallMeta).x
-
-    if meta isa Err
-        discard_matfrostarray!(matfrostin)
-        write_matfrostarray!(matfrostout, matfrostexceptionresult("", "CallMeta not properly written"))
-        return
-    end
-
-    f = getfunction(meta.x)
-
-    if isnothing(f)
-        discard_matfrostarray!(matfrostin)
-        write_matfrostarray!(matfrostout, matfrostexceptionresult("", "Cannot find function"))
-        return
-    end
-
-    Args = Tuple{methods(f)[1].sig.types[2:end]...}
-
-    args = read_matfrostarray!(matfrostin, Args).x
-
-    if args isa Err
-        write_matfrostarray!(matfrostout, matfrostexceptionresult("", "Parsing error"))
-        return
-    end
+    callstruct = read_matfrostarray!(matfrostin)
 
     try
-        o = f((args.x)...)
+        if !(callstruct isa MATFrostArrayCell) || length(callstruct.values) != 2
+            throw("error")
+        end
+
+        callmeta = convert_matfrostarray(CallMeta, callstruct.values[1])
+        
+        f = getfunction(callmeta)
+        
+        Args = Tuple{methods(f)[1].sig.types[2:end]...}
+
+        args = convert_matfrostarray(Args, callstruct.values[2])
+
+        out = f(args...)
+
         write_matfrostarray!(matfrostout, 
-            MATFrostResultMATLAB("SUCCESFUL", "", o)
+            MATFrostResultMATLAB("SUCCESFUL", "", out)
         )
-    catch
-        write_matfrostarray!(matfrostout, matfrostexceptionresult("", "Execution error"))
+    catch e
+        write_matfrostarray!(matfrostout, 
+            MATFrostResultMATLAB("ERROR", "", e)
+        )
     end
+
+    flush!(matfrostout)
+
+
 end
 
 
@@ -117,7 +109,6 @@ function matfrostserve(matfrostin_handle::Ptr{Cvoid}, matfrostout_handle::Ptr{Cv
         try 
 
             callsequence(matfrostin, matfrostout)
-            flush!(matfrostout)
 
         catch e
             
