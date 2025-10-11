@@ -60,7 +60,7 @@ public:
             const std::string cmdline = static_cast<const matlab::data::StringArray>(input["cmdline"])[0];
 
             if (matfrost_server.find(id) == matfrost_server.end()) {
-                auto jp = JuliaProcess::spawn(cmdline);
+                auto jp = MATFrostServer::spawn(cmdline);
                 matfrost_server[id] = MATFrost::Controller::construct_controller(jp);
             }
         }

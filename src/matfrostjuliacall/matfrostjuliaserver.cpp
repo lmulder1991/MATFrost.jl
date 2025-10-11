@@ -150,7 +150,7 @@ public:
 
 };
 
-class JuliaProcess {
+class MATFrostServer {
 
 public:
 
@@ -164,7 +164,7 @@ public:
 
     PROCESS_INFORMATION process_information;
 
-    JuliaProcess(PROCESS_INFORMATION process_information, HANDLE inputstream_h, HANDLE outputstream_h, HANDLE stdinstream_h, HANDLE stdoutstream_h, HANDLE stderrstream_h) :
+    MATFrostServer(PROCESS_INFORMATION process_information, HANDLE inputstream_h, HANDLE outputstream_h, HANDLE stdinstream_h, HANDLE stdoutstream_h, HANDLE stderrstream_h) :
         process_information(process_information),
         inputstream(BufferedInputStream(inputstream_h)),
         outputstream(BufferedOutputStream(outputstream_h)),
@@ -178,7 +178,7 @@ public:
     }
 
 
-    ~JuliaProcess() {
+    ~MATFrostServer() {
         // Close handles to the child process and its primary thread.
         // Some applications might keep these handles to monitor the status
         // of the child process, for example.
@@ -206,7 +206,7 @@ public:
 
 
 
-    static std::shared_ptr<JuliaProcess> spawn(const std::string& cmdline) {
+    static std::shared_ptr<MATFrostServer> spawn(const std::string& cmdline) {
 
         SECURITY_ATTRIBUTES saAttr;
 
@@ -285,7 +285,7 @@ public:
 
 
 
-        return std::make_shared<JuliaProcess>(
+        return std::make_shared<MATFrostServer>(
             piProcInfo,
 
             h_input[0],

@@ -37,9 +37,9 @@ namespace MATFrost::Controller {
         } controller;
 
 
-        std::shared_ptr<JuliaProcess> matfrostserver;
+        std::shared_ptr<MATFrostServer> matfrostserver;
 
-        explicit MATFrostServerController(std::shared_ptr<JuliaProcess> matfrostserver) : matfrostserver(matfrostserver) {}
+        explicit MATFrostServerController(std::shared_ptr<MATFrostServer> matfrostserver) : matfrostserver(matfrostserver) {}
     };
 
 
@@ -103,7 +103,7 @@ namespace MATFrost::Controller {
 
     }
 
-    std::shared_ptr<MATFrostServerController> construct_controller(const std::shared_ptr<JuliaProcess> matfrostserver) {
+    std::shared_ptr<MATFrostServerController> construct_controller(const std::shared_ptr<MATFrostServer> matfrostserver) {
         const std::shared_ptr<MATFrostServerController> matfrostcontroller = std::make_shared<MATFrostServerController>(matfrostserver);
 
         std::thread ct(call_thread, matfrostcontroller);
