@@ -106,9 +106,9 @@ public:
     matlab::data::Array juliacall(std::shared_ptr<MATFrost::Controller::MATFrostServerController> matfrost_controller, const matlab::data::Array callstruct) {
         matlab::data::ArrayFactory factory;
         std::shared_ptr<matlab::engine::MATLABEngine> matlabPtr = getEngine();
-        matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
-                  ({ factory.createScalar(("###################################\nStarting\n###################################\n"))}));
-
+        // matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
+        //           ({ factory.createScalar(("###################################\nStarting\n###################################\n"))}));
+        //
 
         if (!matfrost_controller->matfrostserver->callable()) {
             return factory.createScalar(-1);

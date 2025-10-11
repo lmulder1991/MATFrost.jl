@@ -122,8 +122,10 @@ namespace MATFrost::Controller {
             matfrostcontroller->call.cv.notify_one();
         }
 
+        std::unique_lock<std::mutex> lock{matfrostcontroller->matlab.mtx};
+
         while (true) {
-            std::unique_lock<std::mutex> lock{matfrostcontroller->matlab.mtx};
+
             matfrostcontroller->matlab.cv.wait(lock, [matfrostcontroller]() {
                 return matfrostcontroller->matlab.action != MATLAB_ACTION::NOTHING;
             });
