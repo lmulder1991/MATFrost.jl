@@ -17,12 +17,12 @@ using matlab::mex::ArgumentList;
 
 #include <chrono>
 
-#include "matfrostjuliaserver.cpp"
+#include "server.hpp"
 #include "converttojulia.hpp"
 
 #include "converttomatlab.hpp"
 
-#include "matfrostjuliaservercontroller.hpp"
+#include "controller.hpp"
 
 
 #define EXPERIMENT_SIZE 1000000
