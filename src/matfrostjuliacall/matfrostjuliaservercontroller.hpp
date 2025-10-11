@@ -46,37 +46,47 @@ namespace MATFrost::Controller {
     void call_thread(const std::shared_ptr<MATFrostServerController> matfrostcontroller) {
         matlab::data::ArrayFactory factory;
 
+        std::unique_lock<std::mutex> call_lock{matfrostcontroller->call.mtx};
+
         while (true) {
-            {
-                std::unique_lock<std::mutex> lock{matfrostcontroller->call.mtx};
+            //-------------------------------
+            // Julia Call
+            //-------------------------------
 
-                matfrostcontroller->call.cv.wait(lock, [matfrostcontroller]() {
-                    return !matfrostcontroller->call.input.isEmpty();
-                });
+            // 1. Wait for call request
+            matfrostcontroller->call.cv.wait(call_lock, [matfrostcontroller]() {
+                return !matfrostcontroller->call.input.isEmpty();
+            });
 
-                MATFrost::ConvertToJulia::write(matfrostcontroller->call.input, matfrostcontroller->matfrostserver->outputstream);
-                matfrostcontroller->matfrostserver->outputstream.flush();
+            // 2. Send call to Julia
+            MATFrost::ConvertToJulia::write(matfrostcontroller->call.input, matfrostcontroller->matfrostserver->outputstream);
+            matfrostcontroller->matfrostserver->outputstream.flush();
+            matfrostcontroller->call.input = factory.createEmptyArray();
 
-                matfrostcontroller->call.input = factory.createEmptyArray();
-                matfrostcontroller->call.output = MATFrost::ConvertToMATLAB::read(matfrostcontroller->matfrostserver->inputstream);
+            // 3. Read result from Julia
+            matfrostcontroller->call.output = MATFrost::ConvertToMATLAB::read(matfrostcontroller->matfrostserver->inputstream);
 
-                lock.unlock();
-            }
+            //-------------------------------
+            // Send result to MATLAB thread
+            //-------------------------------
 
+            // 1. Single worker thread able to communicate with MATLAB thread.
             std::lock_guard<std::mutex> worker_lock{matfrostcontroller->matlab.worker_mtx};
-            {
-                std::unique_lock<std::mutex> lock{matfrostcontroller->matlab.mtx};
-                matfrostcontroller->matlab.action = MATLAB_ACTION::CALL;
-                lock.unlock();
 
-                matfrostcontroller->matlab.cv.notify_one();
+            // 2. Start communication with MATLAB thread
+            std::unique_lock<std::mutex> matlab_lock{matfrostcontroller->matlab.mtx};
+            matfrostcontroller->matlab.action = MATLAB_ACTION::CALL;
 
-                lock.lock();
-                matfrostcontroller->matlab.cv.wait(lock, [matfrostcontroller]() {
-                    return matfrostcontroller->matlab.action == MATLAB_ACTION::NOTHING;
-                });
+            // 3. Give ownership to MATLAB thread
+            matlab_lock.unlock();
+            matfrostcontroller->matlab.cv.notify_one();
 
-            }
+            // 4. Operation finished
+            matlab_lock.lock();
+            matfrostcontroller->matlab.cv.wait(matlab_lock, [matfrostcontroller]() {
+                return matfrostcontroller->matlab.action == MATLAB_ACTION::NOTHING;
+            });
+
 
 
 
