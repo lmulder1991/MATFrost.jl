@@ -43,7 +43,7 @@ namespace MATFrost::Controller {
     };
 
 
-    void call_thread(const std::shared_ptr<MATFrostServerController> matfrostcontroller) {
+    void call_worker(const std::shared_ptr<MATFrostServerController> matfrostcontroller) {
         matlab::data::ArrayFactory factory;
 
         std::unique_lock<std::mutex> call_lock{matfrostcontroller->call.mtx};
@@ -95,51 +95,51 @@ namespace MATFrost::Controller {
 
     }
 
-    void log_thread(std::shared_ptr<MATFrostServerController> matfrostcontroller) {
+    void log_worker(std::shared_ptr<MATFrostServerController> matfrostcontroller) {
 
     }
 
-    void controller_thread(std::shared_ptr<MATFrostServerController> matfrostcontroller) {
+    void control_worker(std::shared_ptr<MATFrostServerController> matfrostcontroller) {
 
     }
 
-    std::shared_ptr<MATFrostServerController> construct_controller(const std::shared_ptr<MATFrostServer> matfrostserver) {
-        const std::shared_ptr<MATFrostServerController> matfrostcontroller = std::make_shared<MATFrostServerController>(matfrostserver);
+    std::shared_ptr<MATFrostServerController> construct_controller(const std::shared_ptr<MATFrostServer> matfrost_server) {
+        const std::shared_ptr<MATFrostServerController> matfrost_controller = std::make_shared<MATFrostServerController>(matfrost_server);
 
-        std::thread ct(call_thread, matfrostcontroller);
-        ct.detach();
-        return matfrostcontroller;
+        std::thread call_thread(call_worker, matfrost_controller);
+        call_thread.detach();
+        return matfrost_controller;
     }
 
 
-    matlab::data::Array callsequence(const std::shared_ptr<MATFrostServerController> matfrostcontroller, const matlab::data::Array input) {
+    matlab::data::Array call_sequence(const std::shared_ptr<MATFrostServerController> matfrost_controller, const matlab::data::Array input) {
         matlab::data::ArrayFactory factory;
 
         {
-            std::unique_lock<std::mutex> lock{matfrostcontroller->call.mtx};
-            matfrostcontroller->call.input = input;
+            std::unique_lock<std::mutex> lock{matfrost_controller->call.mtx};
+            matfrost_controller->call.input = input;
             lock.unlock();
-            matfrostcontroller->call.cv.notify_one();
+            matfrost_controller->call.cv.notify_one();
         }
 
-        std::unique_lock<std::mutex> lock{matfrostcontroller->matlab.mtx};
+        std::unique_lock<std::mutex> lock{matfrost_controller->matlab.mtx};
 
         while (true) {
 
-            matfrostcontroller->matlab.cv.wait(lock, [matfrostcontroller]() {
-                return matfrostcontroller->matlab.action != MATLAB_ACTION::NOTHING;
+            matfrost_controller->matlab.cv.wait(lock, [matfrost_controller]() {
+                return matfrost_controller->matlab.action != MATLAB_ACTION::NOTHING;
             });
 
-            if (matfrostcontroller->matlab.action == MATLAB_ACTION::CALL) {
-                matlab::data::Array arr = matfrostcontroller->call.output;
-                matfrostcontroller->matlab.action = MATLAB_ACTION::NOTHING;
+            if (matfrost_controller->matlab.action == MATLAB_ACTION::CALL) {
+                matlab::data::Array arr = matfrost_controller->call.output;
+                matfrost_controller->matlab.action = MATLAB_ACTION::NOTHING;
                 lock.unlock();
-                matfrostcontroller->matlab.cv.notify_one();
+                matfrost_controller->matlab.cv.notify_one();
                 return arr;
             } else {
-                matfrostcontroller->matlab.action = MATLAB_ACTION::NOTHING;
+                matfrost_controller->matlab.action = MATLAB_ACTION::NOTHING;
                 lock.unlock();
-                matfrostcontroller->matlab.cv.notify_one();
+                matfrost_controller->matlab.cv.notify_one();
             }
 
 

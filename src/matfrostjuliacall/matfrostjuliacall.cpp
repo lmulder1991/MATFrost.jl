@@ -114,7 +114,7 @@ public:
             return factory.createScalar(-1);
         }
 
-        return MATFrost::Controller::callsequence(matfrost_controller, callstruct);
+        return MATFrost::Controller::call_sequence(matfrost_controller, callstruct);
         // matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
         //           ({ factory.createScalar(("###################################\ncallable\n###################################\n"))}));
         //
