@@ -2,6 +2,7 @@
 #include <condition_variable>
 #include <mutex>
 
+#include <chrono>
 //
 // #include "converttojulia.hpp"
 // #include "converttomatlab.hpp"
@@ -19,6 +20,7 @@ namespace MATFrost::Controller {
             std::condition_variable cv;
             matlab::data::Array input{};
             matlab::data::Array output{};
+            std::thread thread{};
         } call;
 
         struct {
@@ -100,7 +102,12 @@ namespace MATFrost::Controller {
     }
 
     void control_worker(std::shared_ptr<MATFrostServerController> matfrostcontroller) {
+        while (true) {
+            if (!matfrostcontroller->matfrostserver->is_alive()) {
 
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        }
     }
 
     std::shared_ptr<MATFrostServerController> construct_controller(const std::shared_ptr<MATFrostServer> matfrost_server) {

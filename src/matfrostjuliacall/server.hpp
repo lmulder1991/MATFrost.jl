@@ -202,6 +202,13 @@ public:
         return exit_code == STILL_ACTIVE;
     }
 
+    bool is_alive() {
+        DWORD exit_code;
+        GetExitCodeProcess(process_information.hProcess, &exit_code);
+        return exit_code == STILL_ACTIVE;
+    }
+
+
 
 
 

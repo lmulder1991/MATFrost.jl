@@ -85,7 +85,7 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
          
             obj.mh.feval("matfrostjuliacall", createstruct);
 
-        
+            disp("Created");
         end
 
         function delete(obj)
@@ -103,7 +103,7 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
             % Calls into the loaded julia package.
             
             if indexOp(end).Type ~= matlab.indexing.IndexingOperationType.Paren
-                throw(MException("matfrostjulia:missingCall"));
+                throw(MException("matfrostjulia:invalidCallSignature", "Call signature is missing parentheses."));
             end
 
             fully_qualified_name_arr = arrayfun(@(in) string(in.Name), indexOp(1:end-1));
