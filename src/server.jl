@@ -43,7 +43,7 @@ function getfunction(meta::CallMeta)
     end
 
     f = package
-    for i in 2:length(syms)
+    for i in 2:lastindex(syms)
         try
             f = getfield(f, syms[i])
         catch _
@@ -69,11 +69,8 @@ end
 
 function callsequence(socket::BufferedUDS)
 
-    
-    println("Reading")
     callstruct = read_matfrostarray!(socket)
 
-    println("Read")
     try
         if !(callstruct isa MATFrostArrayCell) || length(callstruct.values) != 2
             throw("error")
@@ -144,18 +141,44 @@ function connect()
 
     rc_connect = uds_connect(socket_fd, path)
 
+    # function uds_socket()
+    vsize = Ref{Cint}()
+    optlen = Ref{Cint}(4)
+    @ccall "Ws2_32.dll".getsockopt(
+        socket_fd::FD_TYPE, 
+        Cint(0xffff)::Cint,
+        Cint(0x1001)::Cint,
+        vsize::Ref{Cint},
+        optlen::Ref{Cint})::Cint
+
+    println("Send size: $(vsize[])")    
     
+    @ccall "Ws2_32.dll".getsockopt(
+        socket_fd::FD_TYPE, 
+        Cint(0xffff)::Cint,
+        Cint(0x1002)::Cint,
+        vsize::Ref{Cint},
+        optlen::Ref{Cint})::Cint
+
+    println("Recieve size: $(vsize[])")
+# end
+
+#     int WSAAPI getsockopt(
+#   [in]      SOCKET s,
+#   [in]      int    level,
+#   [in]      int    optname,
+#   [out]     char   *optval,
+#   [in, out] int    *optlen
+# );
     socket = BufferedUDS(
         socket_fd, 
         Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0),
         Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0))
     
-
     callstruct = (
         (fully_qualified_name="MATFrost._Server.matfrosttest",),
         (12.0,)
     )
-
     
     println("Writing")
     write_matfrostarray!(socket, callstruct)
@@ -165,20 +188,6 @@ function connect()
     out = read_matfrostarray!(socket)
 
     println(out)
-
-    # for i in 1:3
-        
-    #     println(read!(socket, Int64))
-    #     # sleep(2)
-    #     write!(socket, Int64(i*1234))
-    #     flush!(socket)
-
-    # end
-
-    # arr = Vector{Int64}(undef, 1000000)
-    # read!(socket, arr)
-
-    # println("Equals: $(all(arr==(1:1000000)))")
 
     uds_close(socket_fd)
 
