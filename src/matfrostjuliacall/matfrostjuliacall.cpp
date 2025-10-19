@@ -17,6 +17,7 @@ using matlab::mex::ArgumentList;
 
 #include <chrono>
 
+#include "socket.hpp"
 #include "server.hpp"
 #include "converttojulia.hpp"
 
