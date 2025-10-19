@@ -6,6 +6,99 @@ function read! end
 function write! end
 function flush! end
 
+const AF_UNIX = Int32(1)
+const SOCK_STREAM = Int32(1)
+const SOMAXCONN = Int32(0x7fffffff)
+
+const FD_TYPE = UInt64
+
+const SOCKADDR_UN = @NamedTuple{sun_family::UInt16, sun_path::NTuple{256,UInt8}}
+
+function uds_socket()
+    @ccall "Ws2_32.dll".socket(
+        AF_UNIX::Int32, 
+        SOCK_STREAM::Int32, 
+        Int32(0)::Int32)::FD_TYPE
+end
+
+function uds_init()
+    wsadata=Ref{NTuple{408, UInt8}}()
+    @ccall "Ws2_32.dll".WSAStartup(
+        reinterpret(UInt16, (UInt8(2),UInt8(2)))::UInt16, 
+        wsadata::Ref{NTuple{408, UInt8}})::UInt32
+end
+
+function uds_bind(socket_fd::FD_TYPE, path::String)
+
+    pathu8 = transcode(UInt8, path)
+
+    sun_path = ntuple(Val{256}()) do i
+        if i <= length(pathu8)
+            pathu8[i]
+        else
+            UInt8(0)
+        end 
+    end
+    
+    socket_addr = SOCKADDR_UN((UInt16(AF_UNIX), sun_path))
+
+    socket_addr_ref = Ref{SOCKADDR_UN}(socket_addr)
+    @ccall "Ws2_32.dll".bind(
+        socket_fd::FD_TYPE, 
+        socket_addr_ref::Ref{SOCKADDR_UN}, 
+        Int32(sizeof(SOCKADDR_UN))::Int32)::Int32
+end
+
+function uds_connect(socket_fd::FD_TYPE, path::String)
+    pathu8 = transcode(UInt8, path)
+
+    sun_path = ntuple(Val{256}()) do i
+        if i <= length(pathu8)
+            pathu8[i]
+        else
+            UInt8(0)
+        end 
+    end
+    
+    socket_addr = SOCKADDR_UN((UInt16(AF_UNIX), sun_path))
+    socket_addr_ref = Ref{SOCKADDR_UN}(socket_addr)
+
+    @ccall "Ws2_32.dll".connect(
+        socket_fd::FD_TYPE, 
+        socket_addr_ref::Ref{SOCKADDR_UN}, 
+        Int32(sizeof(SOCKADDR_UN))::Int32)::Int32
+end
+
+function uds_listen(socket_fd::FD_TYPE)
+    @ccall "Ws2_32.dll".listen(
+        socket_fd::FD_TYPE, 
+        SOMAXCONN::Int32)::Int32
+end
+
+function uds_accept(socket_fd::FD_TYPE)
+    @ccall "Ws2_32.dll".accept(
+        socket_fd::FD_TYPE,
+        C_NULL::Ptr{Cvoid},
+        C_NULL::Ptr{Cvoid})::FD_TYPE
+end
+
+function uds_read(socket_fd::FD_TYPE, data::Ptr{UInt8}, nb::Int32)
+    @ccall "Ws2_32.dll".recv(
+        socket_fd::FD_TYPE, 
+        data::Ptr{UInt8}, 
+        nb::Int32,
+        Int32(0)::Int32)::Int32
+end
+
+function uds_write(socket_fd::FD_TYPE, data::Ptr{UInt8}, nb::Int32)
+    @ccall "Ws2_32.dll".send(
+        socket_fd::FD_TYPE, 
+        data::Ptr{UInt8}, 
+        nb::Int32,
+        Int32(0)::Int32)::Int32
+end
+
+
 
 mutable struct BufferedStream
     handle::Ptr{Cvoid}
