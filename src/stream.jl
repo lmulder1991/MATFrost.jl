@@ -98,6 +98,11 @@ function uds_write(socket_fd::FD_TYPE, data::Ptr{UInt8}, nb::Int64)
         Cint(0)::Cint)::Cint
 end
 
+function uds_close(socket_fd::FD_TYPE)
+    @ccall "Ws2_32.dll".closesocket(
+        socket_fd::FD_TYPE)::Cint
+end
+
 
 mutable struct Buffer
     data::Vector{UInt8}

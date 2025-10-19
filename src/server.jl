@@ -4,7 +4,7 @@ import ..MATFrost as MATFrost
 import ..MATFrost._Stream: BufferedStream
 import ..MATFrost._Read:  read_matfrostarray!
 import ..MATFrost._Write: write_matfrostarray!
-import ..MATFrost._Stream: flush!
+import ..MATFrost._Stream: flush!, uds_accept, uds_bind, uds_connect, uds_listen, uds_socket, uds_read, uds_write, uds_init, uds_close, FD_TYPE, Buffer, BufferedUDS, write!, read!
 using ..MATFrost._Types
 using ..MATFrost._Constants
 using ..MATFrost._Convert: convert_matfrostarray
@@ -67,10 +67,13 @@ function matfrostexceptionresult(id, message)
     )
 end
 
-function callsequence(matfrostin::BufferedStream, matfrostout::BufferedStream)
+function callsequence(socket::BufferedUDS)
 
-    callstruct = read_matfrostarray!(matfrostin)
+    
+    println("Reading")
+    callstruct = read_matfrostarray!(socket)
 
+    println("Read")
     try
         if !(callstruct isa MATFrostArrayCell) || length(callstruct.values) != 2
             throw("error")
@@ -86,29 +89,125 @@ function callsequence(matfrostin::BufferedStream, matfrostout::BufferedStream)
 
         out = f(args...)
 
-        write_matfrostarray!(matfrostout, 
+        write_matfrostarray!(socket, 
             MATFrostResultMATLAB("SUCCESFUL", "", out)
         )
     catch e
-        write_matfrostarray!(matfrostout, 
+        write_matfrostarray!(socket, 
             MATFrostResultMATLAB("ERROR", "", e)
         )
     end
 
-    flush!(matfrostout)
+    flush!(socket)
 
 
 end
 
 
-function matfrostserve(matfrostin_handle::Ptr{Cvoid}, matfrostout_handle::Ptr{Cvoid})
-    matfrostin = BufferedStream(matfrostin_handle, Vector{UInt8}(undef, 2<<13), 0, 0)
-    matfrostout  = BufferedStream(matfrostout_handle, Vector{UInt8}(undef, 2<<13), 0, 0)
+function setup_uds_server(path)
+    uds_init()
+ 
+    println("WSA setup")
+
+    server_socket_fd = uds_socket()
+
+    println("Made socket")
+
+    # path = raw"C:\Users\jbelier\Documents\test_matfrost3.sock"
+    # if isfile(path)
+    #     rm(path)
+    # end
+    rc_bind = uds_bind(server_socket_fd, path)
+        
+    println("Binded")
+
+    rc_listen = uds_listen(server_socket_fd)
+        
+    println("Listening")
+
+    server_socket_fd
+
+end
+
+
+
+function connect()
+    uds_init()
+
+    println("WSA setup")
+
+    socket_fd = uds_socket()
+
+    println("Made socket")
+
+    path = raw"C:\Users\jbelier\Documents\test_matfrost3.sock"
+
+    rc_connect = uds_connect(socket_fd, path)
+
+    
+    socket = BufferedUDS(
+        socket_fd, 
+        Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0),
+        Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0))
+    
+
+    callstruct = (
+        (fully_qualified_name="MATFrost._Server.matfrosttest",),
+        (12.0,)
+    )
+
+    
+    println("Writing")
+    write_matfrostarray!(socket, callstruct)
+    flush!(socket)
+    
+    println("Written")
+    out = read_matfrostarray!(socket)
+
+    println(out)
+
+    # for i in 1:3
+        
+    #     println(read!(socket, Int64))
+    #     # sleep(2)
+    #     write!(socket, Int64(i*1234))
+    #     flush!(socket)
+
+    # end
+
+    # arr = Vector{Int64}(undef, 1000000)
+    # read!(socket, arr)
+
+    # println("Equals: $(all(arr==(1:1000000)))")
+
+    uds_close(socket_fd)
+
+end
+
+matfrostserve() = matfrostserve(raw"C:\Users\jbelier\Documents\test_matfrost3.sock")
+
+function matfrostserve(socket_path::String)
+
+    server_socket_fd = setup_uds_server(socket_path)
+    bufin = Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0)
+    bufout = Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0)
+
 
     while true  
         try 
+            client_socket_fd = uds_accept(server_socket_fd)
 
-            callsequence(matfrostin, matfrostout)
+            println("Accepted")
+
+            bufin.position = 0
+            bufin.available = 0
+            bufout.position = 0
+            bufout.available = 0
+
+            bufuds = BufferedUDS(client_socket_fd, bufin, bufout)
+            callsequence(bufuds)
+
+            uds_close(client_socket_fd)
 
         catch e
             
