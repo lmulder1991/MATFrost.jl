@@ -102,11 +102,21 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
             
             functionname = indexOp(end-1).Name;
 
-
             args = indexOp(end).Indices;
+            if numel(args)>1
+                signature = args{1};
+                args = args{2:end};
+            end
 
             callstruct.package = string(ns(1));
-            callstruct.func    = string(functionname);
+            if ~exist("signature","var")
+                callstruct.func    = string(functionname);
+            else
+                callstruct.func    = sprintf("%s(%s)",functionname,signature);
+            end
+            callstruct.args    = args(:);
+
+            callstruct.package = string(ns(1));
             callstruct.args    = args(:);
 
             try

@@ -33,11 +33,22 @@ module _JuliaCall
             func_i     = findfirst(fn -> fn == :func, fns)
             args_i     = findfirst(fn -> fn == :args, fns)
 
-            
+            println( package_i, func_i, args_i)
             mfadata = reinterpret(Ptr{Ptr{MATFrostArray}}, mfa.data)
             
             package_sym = Symbol(_ConvertToJulia.convert_to_julia(String, unsafe_load(unsafe_load(mfadata, package_i))))
-            func_sym    = Symbol(_ConvertToJulia.convert_to_julia(String, unsafe_load(unsafe_load(mfadata, func_i))))
+            func_signature = _ConvertToJulia.convert_to_julia(String, unsafe_load(unsafe_load(mfadata, func_i)));
+            if occursin("(", func_signature)
+                a = findfirst('(', func_signature)
+                b = findfirst(')', func_signature)
+                if b === nothing
+                    throw(MATFrostException("matfrostjulia:invalidFunctionSignature", "Missing closing ')' in function signature."))
+                end
+                func_input = strip(func_signature[a+1:b-1])
+                func_sym = Symbol(strip(func_signature[1:a-1]))
+            else
+                func_sym = Symbol(func_signature)
+            end
 
             try 
                 Main.eval(:(import $(package_sym)))
@@ -50,7 +61,6 @@ module _JuliaCall
                 ))
             end
 
-
             func = try 
                 getproperty(getproperty(Main, package_sym), func_sym)
             catch e
@@ -61,17 +71,31 @@ module _JuliaCall
                 """
                 )) 
             end
-
+            index = 1
             if (length(methods(func)) != 1)
-                throw(MATFrostException("matfrostjulia:multipleMethodDefinitions", """
-                Function contains multiple method implementations:
+                if @isdefined func_input
+                    pattern = Regex("$func_sym\\((.*?)\\)")
+                    index = findfirst(m -> first(match(pattern, string(m))) == func_input, methods(func))
+                    if index == nothing
+                        throw(MATFrostException("matfrostjulia:functionSignatureDoesNotExist", """
+                        No method matching the provided function signature.
+                        available methods: $(methods(func)),
+                        while you provided: $func_input [$index]
+                        """
+                        )) 
+                    end
+                else
+                    throw(MATFrostException("matfrostjulia:multipleMethodDefinitions", """
+                    Function contains multiple method implementations:
 
-                $(methods(func))
-                """
-                )) 
+                    $(methods(func))
+                    Please specify the function signature. -> e.g. func(args::Int64, moreargs::String)
+                    """
+                    )) 
+                end
             end
 
-            argstypes = Tuple{(methods(func)[1].sig.types[2:end]...,)...}
+            argstypes = Tuple{(methods(func)[index].sig.types[2:end]...,)...}
 
             args_mfa = unsafe_load(unsafe_load(mfadata, args_i))
             
@@ -89,7 +113,7 @@ module _JuliaCall
                 MATFROSTMEMORY[mfe.matfrostarray] = mfe
                 return mfe.matfrostarray
             else
-                mfe = _ConvertToMATLAB.convert(MATfrostOutput(MATFrostException("matfrostjulia:crashed", sprint(showerror, e, catch_backtrace())), true))
+                mfe = _ConvertToMATLAB.convert(MATFrostOutput(MATFrostException("matfrostjulia:crashed", sprint(showerror, e, catch_backtrace())), true))
                 MATFROSTMEMORY[mfe.matfrostarray] = mfe
                 return mfe.matfrostarray
             end
