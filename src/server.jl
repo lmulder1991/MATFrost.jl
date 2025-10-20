@@ -141,6 +141,18 @@ function connect()
 
     rc_connect = uds_connect(socket_fd, path)
 
+    while rc_connect == -1
+        println(rc_connect)
+        sleep(1)
+        
+        socket_fd = uds_socket()
+
+        println("Made socket")
+    
+        rc_connect = uds_connect(socket_fd, path)
+    end
+
+
     # function uds_socket()
     vsize = Ref{Cint}()
     optlen = Ref{Cint}(4)
@@ -161,6 +173,7 @@ function connect()
         optlen::Ref{Cint})::Cint
 
     println("Recieve size: $(vsize[])")
+
 # end
 
 #     int WSAAPI getsockopt(
@@ -170,6 +183,7 @@ function connect()
 #   [out]     char   *optval,
 #   [in, out] int    *optlen
 # );
+
     socket = BufferedUDS(
         socket_fd, 
         Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0),
@@ -201,10 +215,11 @@ function matfrostserve(socket_path::String)
     bufin = Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0)
     bufout = Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0)
 
-
+    client_socket_fd = uds_accept(server_socket_fd)
+    
     while true  
         try 
-            client_socket_fd = uds_accept(server_socket_fd)
+            # client_socket_fd = uds_accept(server_socket_fd)
 
             println("Accepted")
 
@@ -216,7 +231,7 @@ function matfrostserve(socket_path::String)
             bufuds = BufferedUDS(client_socket_fd, bufin, bufout)
             callsequence(bufuds)
 
-            uds_close(client_socket_fd)
+            # uds_close(client_socket_fd)
 
         catch e
             

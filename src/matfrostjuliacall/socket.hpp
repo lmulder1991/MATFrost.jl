@@ -6,13 +6,21 @@
 #define MATFROST_JL_SOCKET_HPP
 
 #include <cstdint>
+#include <winsock2.h>
 #include <windows.h>
 #include <tchar.h>
 #include <cstdio>
 #include <strsafe.h>
 
 #include <afunix.h>
-#include <winsock2.h>
+// #define UNIX_PATH_MAX 108
+//
+// typedef struct sockaddr_un
+// {
+//     uint16_t sun_family;     /* AF_UNIX */
+//     char sun_path[UNIX_PATH_MAX];  /* pathname */
+// } SOCKADDR_UN;
+
 
 #include <memory>
 
@@ -122,7 +130,7 @@ namespace MATFrost::Socket {
             output.available = 0;
         }
 
-        static std::shared_ptr<BufferedUnixDomainSocket> connect_socket(const std::string &socket_path) {
+        static std::shared_ptr<BufferedUnixDomainSocket> connect_socket(const std::string socket_path) {
             if (!wsa_initialized) {
                 int rc = WSAStartup(MAKEWORD(2, 2), &wsa_data);
                 wsa_initialized = true;
@@ -131,7 +139,7 @@ namespace MATFrost::Socket {
             SOCKET socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
             if (socket_fd == INVALID_SOCKET) {
                 printf("socket() error: %d\n", WSAGetLastError());
-                throw("ERROR: socket() error: %d\n", WSAGetLastError());
+                throw(matlab::engine::MATLABException("ERROR: create socket: \n"));
             }
             // getsockopt(socket_fd, SOL_SOCKET, SO_SNDBUF, (char*)&sndbuf_size, &optlen);
             // getsockopt(socket_fd, SOL_SOCKET, SO_RCVBUF, (char*)&rcvbuf_size, &optlen);
@@ -141,14 +149,14 @@ namespace MATFrost::Socket {
 
             SOCKADDR_UN socket_addr = {0};
             socket_addr.sun_family = AF_UNIX;
-            strncpy_s(socket_addr.sun_path, sizeof socket_addr.sun_path, socket_path.c_str(), (socket_path.length()) - 1);
+            strncpy_s(socket_addr.sun_path, sizeof socket_addr.sun_path, socket_path.c_str(), (socket_path.length()));
 
 
             int rc = connect(socket_fd, reinterpret_cast<struct sockaddr *>(&socket_addr), sizeof(socket_addr));
 
             if (rc == SOCKET_ERROR) {
-                printf("connect() error: %d\n", WSAGetLastError());
-                throw("ERROR: socket() error: %d\n", WSAGetLastError());
+                // printf("connect() error: %d\n", WSAGetLastError());
+                throw(matlab::engine::MATLABException("ERROR: create connection: \n"));
             }
 
             return std::make_shared<BufferedUnixDomainSocket>(socket_path, socket_fd);

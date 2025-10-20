@@ -19,6 +19,7 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
         matfrostjuliacall (1,1) string
         mh                     matlab.mex.MexHost
         project           (1,1) string
+        socket            (1,1) string
     end
 
     methods
@@ -31,32 +32,34 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
                     % This will overrule the version specification.
                     % NOTE: Only needed if version is not specified.
                 argstruct.project     (1,1) string = ""
+
+                argstruct.socket      (1,1) string = ""
             end
             
-            if isfield(argstruct, 'bindir')
-                bindir = argstruct.bindir;
-            elseif isfield(argstruct, 'version')
-                bindir = juliaup(argstruct.version);
-            else
-                [status, bindir] = shell('julia', '-e', 'print(Sys.BINDIR)');
-                assert(~status, "matfrostjulia:julia", ...
-                        "Julia not found on PATH")
-            end
-
-            if ispc
-                obj.julia = fullfile(bindir, "julia.exe");
-            elseif isunix
-                error("matfrostjulia:osNotSupported", "Linux not supported yet.");
-                % obj.julia = fullfile(bindir, "julia");
-            else
-                error("matfrostjulia:osNotSupported", "MacOS not supported yet.");
-            end
-
-            obj.project = argstruct.project;
-
+            % if isfield(argstruct, 'bindir')
+            %     bindir = argstruct.bindir;
+            % elseif isfield(argstruct, 'version')
+            %     bindir = juliaup(argstruct.version);
+            % else
+            %     [status, bindir] = shell('julia', '-e', 'print(Sys.BINDIR)');
+            %     assert(~status, "matfrostjulia:julia", ...
+            %             "Julia not found on PATH")
+            % end
+            % 
+            % if ispc
+            %     obj.julia = fullfile(bindir, "julia.exe");
+            % elseif isunix
+            %     error("matfrostjulia:osNotSupported", "Linux not supported yet.");
+            %     % obj.julia = fullfile(bindir, "julia");
+            % else
+            %     error("matfrostjulia:osNotSupported", "MacOS not supported yet.");
+            % end
+            % 
+            % obj.project = argstruct.project;
+            obj.socket = argstruct.socket;
             
             
-            obj.spawn_server();
+            obj.connect_server();
 
 
         end
@@ -65,6 +68,29 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
     end
 
     methods (Access=private)
+        function obj = connect_server(obj)
+
+            obj.id = uint64(randi(1e9, 'int32'));
+            obj.mh = mexhost();
+
+            % if ~isempty(obj.project)
+            %     project = sprintf("--project=""%s""", obj.project);
+            % else
+            %     project = "";
+            % end
+
+            % bootstrap = fullfile(fileparts(mfilename("fullpath")), "bootstrap.jl");
+
+            createstruct = struct;
+            createstruct.id = obj.id;
+            createstruct.action = "CONNECT";
+            createstruct.socket = obj.socket;
+         
+            obj.mh.feval("matfrostjuliacall", createstruct);
+
+            disp("Created");
+        end
+
         function obj = spawn_server(obj)
 
             obj.id = uint64(randi(1e9, 'int32'));
@@ -88,14 +114,14 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
             disp("Created");
         end
 
-        function delete(obj)
-            
-            destroystruct = struct;
-            destroystruct.id = obj.id;
-            destroystruct.action = "DESTROY";
-
-            obj.mh.feval("matfrostjuliacall", destroystruct);
-        end
+        % function delete(obj)
+        % 
+        %     destroystruct = struct;
+        %     destroystruct.id = obj.id;
+        %     destroystruct.action = "DESTROY";
+        % 
+        %     obj.mh.feval("matfrostjuliacall", destroystruct);
+        % end
     end
    
     methods (Access=protected)

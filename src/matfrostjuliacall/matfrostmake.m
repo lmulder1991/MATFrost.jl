@@ -10,8 +10,9 @@ end
 
 % julia_dir = fileparts(fileparts(juliaexe));
 if ispc
-    mex("-setup:" + fullfile(matlabroot(), "bin", "win64", "mexopts","mingw64_g++.xml"), "C++")
+    % mex("-setup:" + fullfile(matlabroot(), "bin", "win64", "mexopts","mingw64_g++.xml"), "C++")
     mex('-v', ...
+        '-lws2_32',...
         '-output', fullfile(fileparts(mfilename('fullpath')), "bin", mjlname + ".mexw64"), ...
         fullfile(fileparts(mfilename('fullpath')), 'matfrostjuliacall.cpp'));
 % elseif isunix

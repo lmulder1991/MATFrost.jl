@@ -9,7 +9,7 @@
 #include <strsafe.h>
 
 
-#include <afunix.h>
+// #include <afunix.h>
 #include <winsock2.h>
 
 

@@ -1,3 +1,6 @@
+
+#include <winsock2.h>
+
 #include "mex.hpp"
 #include "mexAdapter.hpp"
 
@@ -18,7 +21,7 @@ using matlab::mex::ArgumentList;
 #include <chrono>
 
 #include "socket.hpp"
-#include "server.hpp"
+// #include "server.hpp"
 #include "converttojulia.hpp"
 
 #include "converttomatlab.hpp"
@@ -33,7 +36,9 @@ class MexFunction : public matlab::mex::Function {
 private:
 
 
-    std::map<uint64_t, std::shared_ptr<MATFrost::Controller::MATFrostServerController>> matfrost_server{};
+    // std::map<uint64_t, std::shared_ptr<MATFrost::Controller::MATFrostServerController>> matfrost_server{};
+    std::map<uint64_t, std::shared_ptr<MATFrost::Socket::BufferedUnixDomainSocket>> matfrost_connections{};
+
 
 
 public:
@@ -60,25 +65,32 @@ public:
         if (action == u"CREATE") {
             const std::string cmdline = static_cast<const matlab::data::StringArray>(input["cmdline"])[0];
 
-            if (matfrost_server.find(id) == matfrost_server.end()) {
-                auto jp = MATFrostServer::spawn(cmdline);
-                matfrost_server[id] = MATFrost::Controller::construct_controller(jp);
+            // if (matfrost_server.find(id) == matfrost_server.end()) {
+            //     auto jp = MATFrostServer::spawn(cmdline);
+            //     matfrost_server[id] = MATFrost::Controller::construct_controller(jp);
+            // }
+        } else if (action == u"CONNECT") {
+            const std::string socket_path = static_cast<const matlab::data::StringArray>(input["socket"])[0];
+
+            if (matfrost_connections.find(id) == matfrost_connections.end()) {
+                auto socket = MATFrost::Socket::BufferedUnixDomainSocket::connect_socket(socket_path);
+                matfrost_connections[id] = socket;
             }
         }
         else if (action == u"DESTROY") {
-            if (matfrost_server.find(id) != matfrost_server.end()) {
-                matfrost_server.erase(id);
+            if (matfrost_connections.find(id) != matfrost_connections.end()) {
+                matfrost_connections.erase(id);
             }
         }
         else if (action == u"CALL") {
             const matlab::data::StringArray fully_qualified_name = input["fully_qualified_name"];
             const matlab::data::CellArray args = input["args"];
 
-            if (matfrost_server.find(id) == matfrost_server.end()) {
+            if (matfrost_connections.find(id) == matfrost_connections.end()) {
 
             } else {
 
-                auto ms = matfrost_server[id];
+                auto socket = matfrost_connections[id];
 
 
                 matlab::data::ArrayFactory factory;
@@ -91,7 +103,7 @@ public:
                 callstruct[0] = callmeta;
                 callstruct[1] = args;
 
-                outputs[0] = juliacall(ms, callstruct);
+                outputs[0] = juliacall(socket, callstruct);
 
 
             }
@@ -104,18 +116,26 @@ public:
 
     }
 
-    matlab::data::Array juliacall(std::shared_ptr<MATFrost::Controller::MATFrostServerController> matfrost_controller, const matlab::data::Array callstruct) {
+    matlab::data::Array juliacall(const std::shared_ptr<MATFrost::Socket::BufferedUnixDomainSocket> socket, const matlab::data::Array callstruct) {
         matlab::data::ArrayFactory factory;
-        std::shared_ptr<matlab::engine::MATLABEngine> matlabPtr = getEngine();
-        // matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
-        //           ({ factory.createScalar(("###################################\nStarting\n###################################\n"))}));
+
+        MATFrost::ConvertToJulia::write(socket, callstruct);
+
+        socket->flush();
+
+        return MATFrost::ConvertToMATLAB::read(socket);
+
+        // matlab::data::ArrayFactory factory;
+        // std::shared_ptr<matlab::engine::MATLABEngine> matlabPtr = getEngine();
+        // // matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
+        // //           ({ factory.createScalar(("###################################\nStarting\n###################################\n"))}));
+        // //
         //
-
-        if (!matfrost_controller->matfrostserver->callable()) {
-            return factory.createScalar(-1);
-        }
-
-        return MATFrost::Controller::call_sequence(matfrost_controller, callstruct);
+        // if (!matfrost_controller->matfrostserver->callable()) {
+        //     return factory.createScalar(-1);
+        // }
+        //
+        // return MATFrost::Controller::call_sequence(matfrost_controller, callstruct);
         // matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
         //           ({ factory.createScalar(("###################################\ncallable\n###################################\n"))}));
         //
