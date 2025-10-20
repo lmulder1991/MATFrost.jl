@@ -184,6 +184,20 @@ function convert(structvals::Array{T, N}) where {T, N}
     )
 
 end
+function convert(arr::Vector{T}) where {T<:NamedTuple}
+    println("converting multiple namedTuples")
+    subarrays = convert.(arr)
+    subarrays_ptr = subarrays .|> pointer_from_objref
+
+    data = (subarrays_ptr, subarrays)
+    MATFrostArrayMemory{1, typeof(data), 0}(
+        CELL,
+        (Csize_t(length(arr)),),
+        data,
+        reinterpret(Ptr{Cvoid}, pointer(subarrays_ptr)),
+        ()
+    )
+end
 
 convert_c() = @cfunction(convert, Any, (Any,))
 
