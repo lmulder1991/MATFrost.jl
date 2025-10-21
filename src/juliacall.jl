@@ -32,10 +32,7 @@ module _JuliaCall
             package_i  = findfirst(fn -> fn == :package, fns)
             func_i     = findfirst(fn -> fn == :func, fns)
             args_i     = findfirst(fn -> fn == :args, fns)
-
-            println( package_i, func_i, args_i)
             mfadata = reinterpret(Ptr{Ptr{MATFrostArray}}, mfa.data)
-            
             package_sym = Symbol(_ConvertToJulia.convert_to_julia(String, unsafe_load(unsafe_load(mfadata, package_i))))
             func_signature = _ConvertToJulia.convert_to_julia(String, unsafe_load(unsafe_load(mfadata, func_i)));
             if occursin("(", func_signature)
