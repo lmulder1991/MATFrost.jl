@@ -33,32 +33,37 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
                     % NOTE: Only needed if version is not specified.
                 argstruct.project     (1,1) string = ""
 
-                argstruct.socket      (1,1) string = ""
+                argstruct.socket      (1,1) string = string(tempname) + ".sock"
             end
             
-            % if isfield(argstruct, 'bindir')
-            %     bindir = argstruct.bindir;
-            % elseif isfield(argstruct, 'version')
-            %     bindir = juliaup(argstruct.version);
-            % else
-            %     [status, bindir] = shell('julia', '-e', 'print(Sys.BINDIR)');
-            %     assert(~status, "matfrostjulia:julia", ...
-            %             "Julia not found on PATH")
-            % end
-            % 
-            % if ispc
-            %     obj.julia = fullfile(bindir, "julia.exe");
-            % elseif isunix
-            %     error("matfrostjulia:osNotSupported", "Linux not supported yet.");
-            %     % obj.julia = fullfile(bindir, "julia");
-            % else
-            %     error("matfrostjulia:osNotSupported", "MacOS not supported yet.");
-            % end
+            obj.id = uint64(randi(1e9, 'int32'));
+
+            if isfield(argstruct, 'bindir')
+                bindir = argstruct.bindir;
+            elseif isfield(argstruct, 'version')
+                bindir = juliaup(argstruct.version);
+            else
+                [status, bindir] = shell('julia', '-e', 'print(Sys.BINDIR)');
+                assert(~status, "matfrostjulia:julia", ...
+                        "Julia not found on PATH")
+            end
+
+
+            if ispc
+                obj.julia = fullfile(bindir, "julia.exe");
+            elseif isunix
+                error("matfrostjulia:osNotSupported", "Linux not supported yet.");
+                % obj.julia = fullfile(bindir, "julia");
+            else
+                error("matfrostjulia:osNotSupported", "MacOS not supported yet.");
+            end
+
+            
             % 
             % obj.project = argstruct.project;
             obj.socket = argstruct.socket;
-            
-            
+            argstruct.socket
+            obj.start_server();
             obj.connect_server();
 
 
@@ -68,32 +73,9 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
     end
 
     methods (Access=private)
-        function obj = connect_server(obj)
 
-            obj.id = uint64(randi(1e9, 'int32'));
-            obj.mh = mexhost();
+        function obj = start_server(obj)
 
-            % if ~isempty(obj.project)
-            %     project = sprintf("--project=""%s""", obj.project);
-            % else
-            %     project = "";
-            % end
-
-            % bootstrap = fullfile(fileparts(mfilename("fullpath")), "bootstrap.jl");
-
-            createstruct = struct;
-            createstruct.id = obj.id;
-            createstruct.action = "CONNECT";
-            createstruct.socket = obj.socket;
-         
-            obj.mh.feval("matfrostjuliacall", createstruct);
-
-            disp("Created");
-        end
-
-        function obj = spawn_server(obj)
-
-            obj.id = uint64(randi(1e9, 'int32'));
             obj.mh = mexhost();
 
             if ~isempty(obj.project)
@@ -106,22 +88,37 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
 
             createstruct = struct;
             createstruct.id = obj.id;
-            createstruct.action = "CREATE";
-            createstruct.cmdline = sprintf("""%s"" %s ""%s""", obj.julia, project, bootstrap);
+            createstruct.action = "START";
+            createstruct.cmdline = sprintf("""%s"" %s ""%s"" ""%s""", obj.julia, project, bootstrap, obj.socket);
+            createstruct.socket = obj.socket;
+            
+            obj.mh.feval("matfrostjuliacall", createstruct);
+            pause(10);
+            disp("Started");
+        end
+
+
+        function obj = connect_server(obj)
+
+
+            createstruct = struct;
+            createstruct.id = obj.id;
+            createstruct.action = "CONNECT";
+            createstruct.socket = obj.socket;
          
             obj.mh.feval("matfrostjuliacall", createstruct);
 
-            disp("Created");
+            disp("Connected");
         end
 
-        % function delete(obj)
-        % 
-        %     destroystruct = struct;
-        %     destroystruct.id = obj.id;
-        %     destroystruct.action = "DESTROY";
-        % 
-        %     obj.mh.feval("matfrostjuliacall", destroystruct);
-        % end
+        function delete(obj)
+
+            destroystruct = struct;
+            destroystruct.id = obj.id;
+            destroystruct.action = "STOP";
+
+            obj.mh.feval("matfrostjuliacall", destroystruct);
+        end
     end
    
     methods (Access=protected)

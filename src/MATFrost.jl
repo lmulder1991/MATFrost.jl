@@ -1,6 +1,6 @@
 module MATFrost
 
-export @matfrostserve
+export @matfrostserve, matfrostserve
 
 using Artifacts
 using TOML
@@ -10,6 +10,7 @@ function _read! end
 function _write! end
 
 macro matfrostserve end
+function matfrostserve end
 
 
 

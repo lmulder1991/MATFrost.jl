@@ -207,9 +207,9 @@ function connect()
 
 end
 
-matfrostserve() = matfrostserve(raw"C:\Users\jbelier\Documents\test_matfrost3.sock")
+# matfrostserve() = matfrostserve(raw"C:\Users\jbelier\Documents\test_matfrost3.sock")
 
-function matfrostserve(socket_path::String)
+function MATFrost.matfrostserve(socket_path::String)
 
     server_socket_fd = setup_uds_server(socket_path)
     bufin = Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0)
@@ -251,10 +251,10 @@ end
 
 
 
-macro MATFrost.matfrostserve(matfrostin, matfrostout)
+macro MATFrost.matfrostserve(socket_path)
 esc(quote
 
-    MATFrost._Server.matfrostserve($matfrostin, $matfrostout)
+    MATFrost._Server.matfrostserve($socket_path)
 
 end)
 

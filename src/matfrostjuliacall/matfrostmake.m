@@ -5,7 +5,7 @@ function matfrostmake(mjlname)
 % Or see https://mathworks.com/help/matlab/matlab_external/install-mingw-support-package.html
 
 arguments
-    mjlname  (1,1) string 
+    mjlname  (1,1) string = "matfrostjuliacall"
 end
 
 % julia_dir = fileparts(fileparts(juliaexe));

@@ -21,7 +21,7 @@ using matlab::mex::ArgumentList;
 #include <chrono>
 
 #include "socket.hpp"
-// #include "server.hpp"
+#include "server.hpp"
 #include "converttojulia.hpp"
 
 #include "converttomatlab.hpp"
@@ -35,8 +35,7 @@ using matlab::mex::ArgumentList;
 class MexFunction : public matlab::mex::Function {
 private:
 
-
-    // std::map<uint64_t, std::shared_ptr<MATFrost::Controller::MATFrostServerController>> matfrost_server{};
+    std::map<uint64_t, std::shared_ptr<MATFrost::MATFrostServer>> matfrost_server{};
     std::map<uint64_t, std::shared_ptr<MATFrost::Socket::BufferedUnixDomainSocket>> matfrost_connections{};
 
 
@@ -62,13 +61,12 @@ public:
         const uint64_t id = static_cast<const matlab::data::TypedArray<uint64_t>>(input["id"])[0];
         const std::u16string action = static_cast<const matlab::data::StringArray>(input["action"])[0];
 
-        if (action == u"CREATE") {
+        if (action == u"START") {
             const std::string cmdline = static_cast<const matlab::data::StringArray>(input["cmdline"])[0];
 
-            // if (matfrost_server.find(id) == matfrost_server.end()) {
-            //     auto jp = MATFrostServer::spawn(cmdline);
-            //     matfrost_server[id] = MATFrost::Controller::construct_controller(jp);
-            // }
+            if (matfrost_server.find(id) == matfrost_server.end()) {
+                matfrost_server[id] = MATFrost::MATFrostServer::spawn(cmdline);
+            }
         } else if (action == u"CONNECT") {
             const std::string socket_path = static_cast<const matlab::data::StringArray>(input["socket"])[0];
 
@@ -77,7 +75,7 @@ public:
                 matfrost_connections[id] = socket;
             }
         }
-        else if (action == u"DESTROY") {
+        else if (action == u"STOP") {
             if (matfrost_connections.find(id) != matfrost_connections.end()) {
                 matfrost_connections.erase(id);
             }
@@ -92,9 +90,7 @@ public:
 
                 auto socket = matfrost_connections[id];
 
-
                 matlab::data::ArrayFactory factory;
-
 
                 matlab::data::StructArray callmeta = factory.createStructArray({1}, {"fully_qualified_name"});
                 callmeta[0]["fully_qualified_name"] = fully_qualified_name;
