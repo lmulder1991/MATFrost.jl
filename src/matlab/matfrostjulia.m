@@ -93,7 +93,7 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
             createstruct.socket = obj.socket;
             
             obj.mh.feval("matfrostjuliacall", createstruct);
-            pause(10);
+            % pause(10);
             disp("Started");
         end
 

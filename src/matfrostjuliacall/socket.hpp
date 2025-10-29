@@ -151,13 +151,24 @@ namespace MATFrost::Socket {
             socket_addr.sun_family = AF_UNIX;
             strncpy_s(socket_addr.sun_path, sizeof socket_addr.sun_path, socket_path.c_str(), (socket_path.length()));
 
+            bool started = false;
+            for (size_t i = 0; i < 400; i++) {
+                int rc = connect(socket_fd, reinterpret_cast<struct sockaddr *>(&socket_addr), sizeof(socket_addr));
 
-            int rc = connect(socket_fd, reinterpret_cast<struct sockaddr *>(&socket_addr), sizeof(socket_addr));
-
-            if (rc == SOCKET_ERROR) {
-                // printf("connect() error: %d\n", WSAGetLastError());
-                throw(matlab::engine::MATLABException("ERROR: create connection: \n"));
+                if (rc != SOCKET_ERROR) {
+                    started = true;
+                    break;
+                    // printf("connect() error: %d\n", WSAGetLastError());
+                    // throw(matlab::engine::MATLABException("ERROR: create connection: \n"));
+                } else {
+                    Sleep(100);
+                }
             }
+
+            if (!started) {
+                throw(matlab::engine::MATLABException("Socket timeout 40s: " + socket_path));
+            }
+
 
             return std::make_shared<BufferedUnixDomainSocket>(socket_path, socket_fd);
 
