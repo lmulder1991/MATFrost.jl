@@ -15,8 +15,8 @@ catch _
     end
 end
 
-const matfrostin = reinterpret(Ptr{Cvoid},  parse(UInt64, ARGS[1]))
-const matfrostout = reinterpret(Ptr{Cvoid}, parse(UInt64, ARGS[2]))
+const socket_path = ARGS[1]
+#const matfrostout = reinterpret(Ptr{Cvoid}, parse(UInt64, ARGS[2]))
 
 
-@matfrostserve(matfrostin, matfrostout)
+matfrostserve(socket_path)
