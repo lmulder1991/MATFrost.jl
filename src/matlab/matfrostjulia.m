@@ -144,9 +144,15 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
             callstruct.fully_qualified_name = join(fully_qualified_name_arr, ".");
             callstruct.args    = args(:);
 
+
             jlo = obj.mh.feval("matfrostjuliacall", callstruct);
             
-            varargout{1} = jlo;
+            if jlo.status == "SUCCESFUL"
+                varargout{1} = jlo.value;
+            elseif jlo.status =="ERROR"
+                throw(jlo.value)
+            end
+
         end
 
         function obj = dotAssign(obj,indexOp,varargin)
