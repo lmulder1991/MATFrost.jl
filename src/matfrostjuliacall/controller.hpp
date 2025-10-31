@@ -13,10 +13,10 @@ namespace MATFrost::Controller {
     matlab::data::Array call_sequence(const std::shared_ptr<MATFrost::Socket::BufferedUnixDomainSocket> socket, const matlab::data::Array input) {
         matlab::data::ArrayFactory factory;
 
-        MATFrost::ConvertToJulia::write(socket, input);
+        MATFrost::Write::write(socket, input);
         socket->flush();
 
-        return MATFrost::ConvertToMATLAB::read(socket);
+        return MATFrost::Read::read(socket);
 
     }
 

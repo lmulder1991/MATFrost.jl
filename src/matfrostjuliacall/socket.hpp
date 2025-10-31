@@ -13,14 +13,6 @@
 #include <strsafe.h>
 
 #include <afunix.h>
-// #define UNIX_PATH_MAX 108
-//
-// typedef struct sockaddr_un
-// {
-//     uint16_t sun_family;     /* AF_UNIX */
-//     char sun_path[UNIX_PATH_MAX];  /* pathname */
-// } SOCKADDR_UN;
-
 
 #include <memory>
 

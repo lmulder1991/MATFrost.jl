@@ -22,11 +22,11 @@ using matlab::mex::ArgumentList;
 
 #include "socket.hpp"
 #include "server.hpp"
-#include "converttojulia.hpp"
+#include "write.hpp"
 
-#include "converttomatlab.hpp"
+#include "read.hpp"
 
-#include "controller.hpp"
+// #include "controller.hpp"
 
 
 #define EXPERIMENT_SIZE 1000000
@@ -120,11 +120,11 @@ public:
             throw(matlab::engine::MATLABException("MATFrost server disconnected"));
         }
 
-        MATFrost::ConvertToJulia::write(socket, callstruct);
+        MATFrost::Write::write(socket, callstruct);
 
         socket->flush();
 
-        return MATFrost::ConvertToMATLAB::read(socket);
+        return MATFrost::Read::read(socket);
 
 
     }

@@ -8,7 +8,7 @@
 #include <memory>
 
 
-namespace MATFrost::ConvertToMATLAB {
+namespace MATFrost::Read {
 
     matlab::data::Array read(const std::shared_ptr<Socket::BufferedUnixDomainSocket> socket);
 

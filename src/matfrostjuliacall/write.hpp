@@ -7,7 +7,7 @@
 #include <complex>
 
 
-namespace MATFrost::ConvertToJulia {
+namespace MATFrost::Write {
 
 
     void write(const std::shared_ptr<Socket::BufferedUnixDomainSocket> socket, const matlab::data::Array arr);
