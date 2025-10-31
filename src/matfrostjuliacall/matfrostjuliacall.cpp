@@ -69,9 +69,10 @@ public:
             }
         } else if (action == u"CONNECT") {
             const std::string socket_path = static_cast<const matlab::data::StringArray>(input["socket"])[0];
+            const uint64_t timeout = static_cast<const matlab::data::TypedArray<uint64_t>>(input["timeout"])[0];
 
             if (matfrost_connections.find(id) == matfrost_connections.end()) {
-                auto socket = MATFrost::Socket::BufferedUnixDomainSocket::connect_socket(socket_path);
+                auto socket = MATFrost::Socket::BufferedUnixDomainSocket::connect_socket(socket_path, timeout);
                 matfrost_connections[id] = socket;
             }
         }
@@ -115,43 +116,17 @@ public:
     matlab::data::Array juliacall(const std::shared_ptr<MATFrost::Socket::BufferedUnixDomainSocket> socket, const matlab::data::Array callstruct) {
         matlab::data::ArrayFactory factory;
 
+        if (!socket->is_connected()) {
+            throw(matlab::engine::MATLABException("MATFrost server disconnected"));
+        }
+
         MATFrost::ConvertToJulia::write(socket, callstruct);
 
         socket->flush();
 
         return MATFrost::ConvertToMATLAB::read(socket);
 
-        // matlab::data::ArrayFactory factory;
-        // std::shared_ptr<matlab::engine::MATLABEngine> matlabPtr = getEngine();
-        // // matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
-        // //           ({ factory.createScalar(("###################################\nStarting\n###################################\n"))}));
-        // //
-        //
-        // if (!matfrost_controller->matfrostserver->callable()) {
-        //     return factory.createScalar(-1);
-        // }
-        //
-        // return MATFrost::Controller::call_sequence(matfrost_controller, callstruct);
-        // matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
-        //           ({ factory.createScalar(("###################################\ncallable\n###################################\n"))}));
-        //
-        // // MATFrost::ConvertToJulia::write(callstruct, jp->outputstream);
-        // // msc->matfrostserver->outputstream.flush();
-        //
-        // matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
-        //   ({ factory.createScalar(("###################################\nwritten\n###################################\n"))}));
-        //
-        // while (!jp->inputstream.available()) {
-        //     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        // }
-        //
-        // matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
-        //   ({ factory.createScalar(("###################################\nreading\n###################################\n"))}));
-        //
-        // return MATFrost::ConvertToMATLAB::read(jp->inputstream);
 
-  //       matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
-  // ({ factory.createScalar(("###################################\nread\n###################################\n"))}));
     }
 
 

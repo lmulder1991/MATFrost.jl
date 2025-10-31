@@ -20,6 +20,7 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
         mh                     matlab.mex.MexHost
         project           (1,1) string
         socket            (1,1) string
+        timeout           (1,1) uint64
     end
 
     methods
@@ -34,9 +35,13 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
                 argstruct.project     (1,1) string = ""
 
                 argstruct.socket      (1,1) string = string(tempname) + ".sock"
+
+                argstruct.timeout     (1,1) uint64 = 600e3 % 10 minutes
             end
             
             obj.id = uint64(randi(1e9, 'int32'));
+            obj.socket = argstruct.socket;
+            obj.timeout = argstruct.timeout;
 
             if isfield(argstruct, 'bindir')
                 bindir = argstruct.bindir;
@@ -61,7 +66,6 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
             
             % 
             % obj.project = argstruct.project;
-            obj.socket = argstruct.socket;
             argstruct.socket
             obj.start_server();
             obj.connect_server();
@@ -93,7 +97,7 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
             createstruct.socket = obj.socket;
             
             obj.mh.feval("matfrostjuliacall", createstruct);
-            % pause(10);
+            % pause(30);
             disp("Started");
         end
 
@@ -101,12 +105,14 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
         function obj = connect_server(obj)
 
 
-            createstruct = struct;
-            createstruct.id = obj.id;
-            createstruct.action = "CONNECT";
-            createstruct.socket = obj.socket;
+            connectstruct = struct;
+            connectstruct.id = obj.id;
+            connectstruct.action = "CONNECT";
+            connectstruct.socket = obj.socket;
+            connectstruct.timeout = obj.timeout;
+
          
-            obj.mh.feval("matfrostjuliacall", createstruct);
+            obj.mh.feval("matfrostjuliacall", connectstruct);
 
             disp("Connected");
         end

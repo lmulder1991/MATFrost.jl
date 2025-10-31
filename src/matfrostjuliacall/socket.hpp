@@ -53,7 +53,7 @@ namespace MATFrost::Socket {
         Buffer output{};
 
     public:
-        BufferedUnixDomainSocket(const std::string &socket_path, SOCKET socket) : socket_path(socket_path), socket_fd(socket) {
+        BufferedUnixDomainSocket(const std::string &socket_path, SOCKET socket, timeval timeout) : socket_path(socket_path), socket_fd(socket), timeout(timeout) {
 
         }
 
@@ -249,53 +249,49 @@ namespace MATFrost::Socket {
         }
 
 
-
         bool is_connected() const {
             if (socket_fd == INVALID_SOCKET) {
                 return false;
             }
 
-            // Step 1: Check for socket-level errors
-            int error = 0;
-            int error_len = sizeof(error);
-            if (getsockopt(socket_fd, SOL_SOCKET, SO_ERROR,
-                           reinterpret_cast<char*>(&error), &error_len) == SOCKET_ERROR) {
-                return false;
-                           }
+            fd_set write_set, error_set;
+            FD_ZERO(&write_set);
+            FD_ZERO(&error_set);
 
-            if (error != 0) {
-                return false;
-            }
+            FD_SET(socket_fd, &write_set);
+            FD_SET(socket_fd, &error_set);
 
-            // Step 2: Use recv with MSG_PEEK to check connection status
-            // This doesn't consume any data from the socket
-            char buf[1];
-            int result = recv(socket_fd, buf, 1, MSG_PEEK);
+            // Zero timeout = immediate return (non-blocking check)
+            timeval timeout = {0, 0};
 
-            if (result == 0) {
-                // recv() returned 0 = connection closed gracefully by peer
+            int result = select(0, nullptr, &write_set, &error_set, &timeout);
+
+            if (result == SOCKET_ERROR || result == 0) {
                 return false;
             }
 
-            if (result == SOCKET_ERROR) {
-                int recv_error = WSAGetLastError();
-
-                // WSAEWOULDBLOCK means no data available but socket is connected
-                // This is normal for non-blocking sockets
-                if (recv_error == WSAEWOULDBLOCK) {
-                    return true;
-                }
-
-                // Any other error means connection is broken
-                // Common errors: WSAECONNRESET, WSAECONNABORTED, WSAENOTCONN
+            // Check for errors
+            if (FD_ISSET(socket_fd, &error_set)) {
                 return false;
             }
 
-            // result > 0 means data available and socket is connected
-            return true;
+            // Check if writable (connected sockets are usually writable)
+            if (FD_ISSET(socket_fd, &write_set)) {
+                // Verify no pending error
+                int error = 0;
+                int error_len = sizeof(error);
+                if (getsockopt(socket_fd, SOL_SOCKET, SO_ERROR,
+                              reinterpret_cast<char*>(&error), &error_len) == SOCKET_ERROR) {
+                    return false;
+                              }
+                return error == 0;
+            }
+
+            return false;
         }
 
-        static std::shared_ptr<BufferedUnixDomainSocket> connect_socket(const std::string socket_path) {
+
+        static std::shared_ptr<BufferedUnixDomainSocket> connect_socket(const std::string socket_path, const int timeout_ms = 5000) {
             if (!wsa_initialized) {
                 int rc = WSAStartup(MAKEWORD(2, 2), &wsa_data);
                 if (rc != 0) {
@@ -309,7 +305,9 @@ namespace MATFrost::Socket {
             strncpy_s(socket_addr.sun_path, sizeof socket_addr.sun_path,
                       socket_path.c_str(), socket_path.length());
 
-
+            timeval timeout;
+            timeout.tv_sec = timeout_ms / 1000;
+            timeout.tv_usec = (timeout_ms % 1000) * 1000;
 
             for (int attempt = 0; attempt < 400; attempt++) {
                 SOCKET socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -332,7 +330,7 @@ namespace MATFrost::Socket {
 
                 if (rc == 0) {
                     // Connection succeeded immediately
-                    return std::make_shared<BufferedUnixDomainSocket>(socket_path, socket_fd);
+                    return std::make_shared<BufferedUnixDomainSocket>(socket_path, socket_fd, timeout);
                 }
                 closesocket(socket_fd);
                 Sleep(100);
