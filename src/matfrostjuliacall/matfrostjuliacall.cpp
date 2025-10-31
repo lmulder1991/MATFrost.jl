@@ -72,7 +72,7 @@ public:
             const uint64_t timeout = static_cast<const matlab::data::TypedArray<uint64_t>>(input["timeout"])[0];
 
             if (matfrost_connections.find(id) == matfrost_connections.end()) {
-                auto socket = MATFrost::Socket::BufferedUnixDomainSocket::connect_socket(socket_path, timeout);
+                auto socket = MATFrost::Socket::BufferedUnixDomainSocket::connect_socket(socket_path, static_cast<long>(timeout));
                 matfrost_connections[id] = socket;
             }
         }

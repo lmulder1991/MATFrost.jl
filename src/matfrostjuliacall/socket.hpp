@@ -168,9 +168,6 @@ namespace MATFrost::Socket {
             FD_SET(socket_fd, &read_set);
             FD_SET(socket_fd, &error_set);
 
-            // timeval timeout;
-            // timeout.tv_sec = timeout_ms / 1000;
-            // timeout.tv_usec = (timeout_ms % 1000) * 1000;
 
             int result = select(0, &read_set, nullptr, &error_set, &timeout);
 
@@ -291,7 +288,7 @@ namespace MATFrost::Socket {
         }
 
 
-        static std::shared_ptr<BufferedUnixDomainSocket> connect_socket(const std::string socket_path, const int timeout_ms = 5000) {
+        static std::shared_ptr<BufferedUnixDomainSocket> connect_socket(const std::string socket_path, const long timeout_ms) {
             if (!wsa_initialized) {
                 int rc = WSAStartup(MAKEWORD(2, 2), &wsa_data);
                 if (rc != 0) {
@@ -311,18 +308,11 @@ namespace MATFrost::Socket {
 
             for (int attempt = 0; attempt < 400; attempt++) {
                 SOCKET socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+
                 if (socket_fd == INVALID_SOCKET) {
                     throw(matlab::engine::MATLABException("Failed to create socket: " +
                                                          std::to_string(WSAGetLastError())));
                 }
-
-                // // Set non-blocking mode
-                // u_long mode = 1;
-                // if (ioctlsocket(socket_fd, FIONBIO, &mode) != 0) {
-                //     closesocket(socket_fd);
-                //     throw(matlab::engine::MATLABException("Failed to set non-blocking mode: " +
-                //                                          std::to_string(WSAGetLastError())));
-                // }
 
                 // Attempt connection
                 int rc = connect(socket_fd, reinterpret_cast<struct sockaddr *>(&socket_addr),
@@ -334,113 +324,12 @@ namespace MATFrost::Socket {
                 }
                 closesocket(socket_fd);
                 Sleep(100);
-                // int error = WSAGetLastError();
-                //
-                // if (error == WSAEWOULDBLOCK) {
-                //     // Connection in progress - wait for completion
-                //     fd_set write_set, error_set;
-                //     FD_ZERO(&write_set);
-                //     FD_ZERO(&error_set);
-                //
-                //     FD_SET(socket_fd, &write_set);
-                //     FD_SET(socket_fd, &error_set);
-                //
-                //     timeval tv;
-                //     tv.tv_sec = 0;
-                //     tv.tv_usec = 500000;  // 500ms timeout per attempt
-                //
-                //     int select_result = select(0, nullptr, &write_set, &error_set, &tv);
-                //
-                //     if (select_result > 0) {
-                //         if (FD_ISSET(socket_fd, &error_set)) {
-                //             // Connection failed
-                //             closesocket(socket_fd);
-                //         } else if (FD_ISSET(socket_fd, &write_set)) {
-                //             // Check if connection actually succeeded
-                //             int sock_error = 0;
-                //             int error_len = sizeof(sock_error);
-                //             if (getsockopt(socket_fd, SOL_SOCKET, SO_ERROR,
-                //                           reinterpret_cast<char*>(&sock_error), &error_len) == 0) {
-                //                 if (sock_error == 0) {
-                //                     // Connection successful!
-                //                     return std::make_shared<BufferedUnixDomainSocket>(socket_path, socket_fd);
-                //                 }
-                //             }
-                //             closesocket(socket_fd);
-                //         }
-                //     } else {
-                //         // Timeout or error
-                //         closesocket(socket_fd);
-                //     }
-                // } else {
-                //     // Connection failed with other error
-                //     closesocket(socket_fd);
-                // }
-
-                // Wait before retry
-                Sleep(100);
             }
             throw(matlab::engine::MATLABException("Connection timeout after " +
                                      std::to_string(40) +
                                      " seconds: " + socket_path));
 
         }
-
-            //
-            // SOCKET socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-            // if (socket_fd == INVALID_SOCKET) {
-            //     printf("socket() error: %d\n", WSAGetLastError());
-            //     throw(matlab::engine::MATLABException("ERROR: create socket: \n"));
-            // }
-            //
-            // u_long mode = 1;
-            // ioctlsocket(socket_fd, FIONBIO, &mode);
-            //
-            // // getsockopt(socket_fd, SOL_SOCKET, SO_SNDBUF, (char*)&sndbuf_size, &optlen);
-            // // getsockopt(socket_fd, SOL_SOCKET, SO_RCVBUF, (char*)&rcvbuf_size, &optlen);
-            //
-            //
-            // // write(socket_fd,
-            //
-            // SOCKADDR_UN socket_addr = {0};
-            // socket_addr.sun_family = AF_UNIX;
-            // strncpy_s(socket_addr.sun_path, sizeof socket_addr.sun_path, socket_path.c_str(), (socket_path.length()));
-            //
-            // int rc = connect(socket_fd, reinterpret_cast<struct sockaddr *>(&socket_addr), sizeof(socket_addr));
-            //
-            // if (rc != SOCKET_ERROR) {
-            //     // WSAEWOULDBLOCK - connection in progress
-            //     // Wait for connection to complete
-            //     if (!wait_for_connection(socket_fd, 40000)) {  // 40 second timeout
-            //         closesocket(socket_fd);
-            //         throw(matlab::engine::MATLABException("Connection timeout: " + socket_path));
-            //     }
-            // } else {
-            //     closesocket(socket_fd);
-            //     throw(matlab::engine::MATLABException("Connection error: " + socket_path));
-            // }
-            // bool started = false;
-            // for (size_t i = 0; i < 400; i++) {
-            //
-            //     if (rc != SOCKET_ERROR) {
-            //         started = true;
-            //         break;
-            //         // printf("connect() error: %d\n", WSAGetLastError());
-            //         // throw(matlab::engine::MATLABException("ERROR: create connection: \n"));
-            //     } else {
-            //         Sleep(100);
-            //     }
-            // }
-            //
-            // if (!started) {
-            //     throw(matlab::engine::MATLABException("Socket timeout 40s: " + socket_path));
-            // }
-
-
-            // return std::make_shared<BufferedUnixDomainSocket>(socket_path, socket_fd);
-
-        // }
-
 
     };
 }

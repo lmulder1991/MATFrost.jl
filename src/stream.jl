@@ -83,19 +83,30 @@ function uds_accept(socket_fd::FD_TYPE)
 end
 
 function uds_read(socket_fd::FD_TYPE, data::Ptr{UInt8}, nb::Int64)
-    @ccall "Ws2_32.dll".recv(
+    rc = @ccall "Ws2_32.dll".recv(
         socket_fd::FD_TYPE, 
         data::Ptr{UInt8}, 
         Cint(nb)::Cint,
         Cint(0)::Cint)::Cint
+    if rc > 0
+        return rc
+    else
+        error("Server killed")
+    end
 end
 
 function uds_write(socket_fd::FD_TYPE, data::Ptr{UInt8}, nb::Int64)
-    @ccall "Ws2_32.dll".send(
+    sent = @ccall "Ws2_32.dll".send(
         socket_fd::FD_TYPE, 
         data::Ptr{UInt8}, 
         Cint(nb)::Cint,
         Cint(0)::Cint)::Cint
+
+    if sent > 0
+        return sent
+    else
+        error("Server killed")
+    end
 end
 
 function uds_close(socket_fd::FD_TYPE)
