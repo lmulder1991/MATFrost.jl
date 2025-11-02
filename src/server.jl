@@ -24,23 +24,16 @@ function MATFrost.matfrostserve(socket_path::String)
 
     server_socket_fd = setup_uds_server(socket_path)
 
+    client_socket_fd = uds_accept(server_socket_fd)
+
     bufin = Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0)
     bufout = Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0)
-
-    client_socket_fd = uds_accept(server_socket_fd)
     
     bufuds = BufferedUDS(client_socket_fd, bufin, bufout)
     
     while true  
         try 
-
-            bufin.position = 0
-            bufin.available = 0
-            bufout.position = 0
-            bufout.available = 0
-
             callsequence(bufuds)
-
         catch e
             Base.showerror(stdout, e)
             Base.show_backtrace(stdout, Base.catch_backtrace())
@@ -155,151 +148,6 @@ function setup_uds_server(path)
 
 end
 
-
-
-# function connect()
-#     uds_init()
-
-#     println("WSA setup")
-
-#     socket_fd = uds_socket()
-
-#     println("Made socket")
-
-#     path = raw"C:\Users\jbelier\Documents\test_matfrost3.sock"
-
-#     rc_connect = uds_connect(socket_fd, path)
-
-#     while rc_connect == -1
-#         println(rc_connect)
-#         sleep(1)
-        
-#         socket_fd = uds_socket()
-
-#         println("Made socket")
-    
-#         rc_connect = uds_connect(socket_fd, path)
-#     end
-
-
-#     # function uds_socket()
-#     vsize = Ref{Cint}()
-#     optlen = Ref{Cint}(4)
-#     @ccall "Ws2_32.dll".getsockopt(
-#         socket_fd::FD_TYPE, 
-#         Cint(0xffff)::Cint,
-#         Cint(0x1001)::Cint,
-#         vsize::Ref{Cint},
-#         optlen::Ref{Cint})::Cint
-
-#     println("Send size: $(vsize[])")    
-    
-#     @ccall "Ws2_32.dll".getsockopt(
-#         socket_fd::FD_TYPE, 
-#         Cint(0xffff)::Cint,
-#         Cint(0x1002)::Cint,
-#         vsize::Ref{Cint},
-#         optlen::Ref{Cint})::Cint
-
-#     println("Recieve size: $(vsize[])")
-
-# # end
-
-# #     int WSAAPI getsockopt(
-# #   [in]      SOCKET s,
-# #   [in]      int    level,
-# #   [in]      int    optname,
-# #   [out]     char   *optval,
-# #   [in, out] int    *optlen
-# # );
-
-#     socket = BufferedUDS(
-#         socket_fd, 
-#         Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0),
-#         Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0))
-    
-#     callstruct = (
-#         (fully_qualified_name="MATFrost._Server.matfrosttest",),
-#         (12.0,)
-#     )
-    
-#     println("Writing")
-#     write_matfrostarray!(socket, callstruct)
-#     flush!(socket)
-    
-#     println("Written")
-#     out = read_matfrostarray!(socket)
-
-#     println(out)
-
-#     uds_close(socket_fd)
-
-# end
-
-# matfrostserve() = matfrostserve(raw"C:\Users\jbelier\Documents\test_matfrost3.sock")
-
-
-function read_logging(p_handle)
-
-    bytesavailable = Ref{Cint}()
-    result = @ccall "Kernel32.dll".PeekNamedPipe(
-        p_handle::Ptr{Cvoid}, 
-        C_NULL::Ptr{Cvoid},
-        Cint(0)::Cint,
-        C_NULL::Ptr{Cvoid},
-        bytesavailable::Ref{Cint},
-        C_NULL::Ptr{Cvoid})::Cint
-    if result == 0
-        return ""
-    end
-
-    buf = Vector{UInt8}()
-
-
-end
-
-
-
-
-function set_std_out_pipe()
-    sa_attributes = Ref{Tuple{Cint, Clonglong,Cint}}((Cint(24), Clonglong(0), Cint(1)))
-
-    std_out_in_ref = Ref{Ptr{Cvoid}}()
-    std_out_out_ref = Ref{Ptr{Cvoid}}()
-
-    @ccall "Kernel32.dll".CreatePipe(
-        std_out_in_ref::Ref{Ptr{Cvoid}},
-        std_out_out_ref::Ref{Ptr{Cvoid}},
-        sa_attributes::Ref{Tuple{Cint, Clonglong,Cint}},
-        Cint(0)::Cint)::Cint
-
-    # sa_attributes
-    std_out_in = std_out_in_ref[]
-    std_out_out = std_out_out_ref[]
-
-    (std_out_in, std_out_out)
-
-    # nstdhandle = Cint(-11)
-    # handle = C_NULL
-    # @ccall "Kernel32.dll".SetStdHandle(
-    #     nstdhandle::Cint, 
-    #     handle::Ptr{Cvoid})::Cint
-end
-
-
-function setstdhandle(handle)
-    nstdhandle = Cint(-11)
-    # handle = C_NULL
-    @ccall "Kernel32.dll".SetStdHandle(
-        nstdhandle::Cint, 
-        handle::Ptr{Cvoid})::Cint
-end
-
-function getstdhandle()
-    nstdhandle = Cint(-11)
-    @ccall "Kernel32.dll".GetStdHandle(
-        nstdhandle::Cint)::Ptr{Cvoid}
-end
 
 
 macro MATFrost.matfrostserve(socket_path)

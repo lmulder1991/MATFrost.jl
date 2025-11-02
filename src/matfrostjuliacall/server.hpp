@@ -159,7 +159,7 @@ namespace MATFrost {
               &siStartInfo,  // STARTUPINFO pointer
               &piProcInfo)  // receives PROCESS_INFORMATION
             ) {
-                throw matlab::engine::MATLABException("Julia process could not be started.");
+                throw matlab::engine::MATLABException("Julia process could not be started. With cmdline: " + cmdline);
             }
 
             CloseHandle(h_stdouterr[1]);

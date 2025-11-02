@@ -61,26 +61,21 @@ public:
 
         if (action == u"START") {
             const std::string cmdline = static_cast<const matlab::data::StringArray>(input["cmdline"])[0];
-
-            if (matfrost_server.find(id) == matfrost_server.end()) {
-                matfrost_server[id] = MATFrost::MATFrostServer::spawn(cmdline);
-            }
-        } else if (action == u"CONNECT") {
             const std::string socket_path = static_cast<const matlab::data::StringArray>(input["socket"])[0];
             const uint64_t timeout = static_cast<const matlab::data::TypedArray<uint64_t>>(input["timeout"])[0];
 
-            if ( matfrost_server.find(id) == matfrost_server.end()) {
-                throw(matlab::engine::MATLABException("MATFrost server not started"));
+            if (matfrost_server.find(id) != matfrost_server.end() || matfrost_connections.find(id) != matfrost_connections.end()) {
+                throw(matlab::engine::MATLABException("MATFrost server already started"));
             }
+            auto matlab = getEngine();
+            auto server = MATFrost::MATFrostServer::spawn(cmdline);
+            auto socket = MATFrost::Socket::BufferedUnixDomainSocket::connect_socket(socket_path, server, matlab, static_cast<long>(timeout));
 
-            if (matfrost_connections.find(id) == matfrost_connections.end()) {
-                auto server = matfrost_server[id];
-                auto matlab = getEngine();
-                auto socket = MATFrost::Socket::BufferedUnixDomainSocket::connect_socket(socket_path, server, matlab, static_cast<long>(timeout));
-                matfrost_connections[id] = socket;
-            }
-        }
-        else if (action == u"STOP") {
+            matfrost_server[id] = server;
+            matfrost_connections[id] = socket;
+
+
+        } else if (action == u"STOP") {
             if (matfrost_connections.find(id) != matfrost_connections.end()) {
                 matfrost_connections.erase(id);
             }
@@ -155,8 +150,8 @@ public:
             } else {
                 server->dump_logging(matlab);
 
-                matlab->feval(u"disp", 0, std::vector<matlab::data::Array>
-                    ({ factory.createScalar((""))})); // No-operation added to be able interrupt.
+                matlab->feval(u"pause", 0, std::vector<matlab::data::Array>
+                    ({ factory.createScalar(0.0)})); // No-operation added to be able interrupt.
             }
         }
 

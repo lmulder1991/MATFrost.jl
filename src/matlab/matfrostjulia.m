@@ -70,11 +70,8 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
             end
 
             
-            % 
-            % obj.project = argstruct.project;
             argstruct.socket
             obj.start_server();
-            obj.connect_server();
 
         end
 
@@ -98,6 +95,8 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
             createstruct = struct;
             createstruct.id = obj.id;
             createstruct.action = "START";
+            createstruct.socket = obj.socket;
+            createstruct.timeout = obj.timeout;
             createstruct.cmdline = sprintf("""%s"" %s ""%s"" ""%s""", obj.julia, project, bootstrap, obj.socket);
             createstruct.socket = obj.socket;
             
@@ -109,23 +108,6 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
         end
 
 
-        function obj = connect_server(obj)
-
-
-            connectstruct = struct;
-            connectstruct.id = obj.id;
-            connectstruct.action = "CONNECT";
-            connectstruct.socket = obj.socket;
-            connectstruct.timeout = obj.timeout;
-
-         
-            if obj.USE_MEXHOST
-                obj.mh.feval("matfrostjuliacall", connectstruct);
-            else
-                matfrostjuliacall(connectstruct);
-            end
-
-        end
 
         function delete(obj)
 
