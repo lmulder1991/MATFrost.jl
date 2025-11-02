@@ -112,8 +112,14 @@ public:
             callstruct[0] = callmeta;
             callstruct[1] = args;
 
-            outputs[0] = juliacall(socket, server, callstruct);
-
+            try {
+                outputs[0] = juliacall(socket, server, callstruct);
+            } catch (matlab::engine::MATLABException& e) {
+                // Unrecoverable discconect and stop server
+                matfrost_connections.erase(id);
+                matfrost_server.erase(id);
+                throw matlab::engine::MATLABException(e);
+            }
         }
 
 
@@ -138,14 +144,18 @@ public:
         timeval timeout{0, 100000}; // 100ms
 
         for (size_t i = 0; i < niters; i++) {
-            if (!socket->wait_for_readable(timeout)) {
-                server->dump_logging(matlab);
-            } else {
+            if (socket->wait_for_readable(timeout)) {
+                // Data available to read
                 auto jlout = MATFrost::Read::read(socket);
 
                 server->dump_logging(matlab);
 
                 return jlout;
+            } else {
+                server->dump_logging(matlab);
+
+                matlab->feval(u"disp", 0, std::vector<matlab::data::Array>
+                    ({ factory.createScalar((""))})); // No-operation added to be able interrupt.
             }
         }
 
@@ -157,4 +167,3 @@ public:
 
 };
 
-// class
