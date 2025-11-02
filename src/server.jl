@@ -25,6 +25,8 @@ function MATFrost.matfrostserve(socket_path::String)
     server_socket_fd = setup_uds_server(socket_path)
 
     client_socket_fd = uds_accept(server_socket_fd)
+    
+    println("MATFrost server connected. Ready for requests.")
 
     bufin = Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0)
     bufout = Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0)
@@ -82,7 +84,7 @@ function getfunction(meta::CallMeta)
     syms = Symbol.(eachsplit(meta.fully_qualified_name,"."))
 
     if length(syms) < 2
-        throw("Incompatible fully_qualified_name")
+        throw("Incompatible fully_qualified_name: $(meta.fully_qualified_name)")
     end
     
     packagename = syms[1]
@@ -127,39 +129,17 @@ end
 
 function setup_uds_server(path)
     uds_init()
- 
-    println("WSA setup")
 
     server_socket_fd = uds_socket()
 
-    println("Made socket")
-
-    # path = raw"C:\Users\jbelier\Documents\test_matfrost3.sock"
-    # if isfile(path)
-    #     rm(path)
-    # end
     rc_bind = uds_bind(server_socket_fd, path)
-        
-    println("Binded")
 
     rc_listen = uds_listen(server_socket_fd)
-        
-    println("Listening")
 
     server_socket_fd
 
 end
 
-
-
-# macro MATFrost.matfrostserve(socket_path)
-# esc(quote
-
-#     MATFrost._Server.matfrostserve($socket_path)
-
-# end)
-
-# end
 
 
 

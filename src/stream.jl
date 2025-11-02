@@ -15,6 +15,14 @@ const INVALID_SOCKET = UInt64(0)
 
 const SOCKADDR_UN = @NamedTuple{sun_family::UInt16, sun_path::NTuple{256,UInt8}}
 
+function memcpy_mat(pdest::Ptr{UInt8}, psrc::Ptr{UInt8}, nb::Csize_t)
+    @ccall memcpy(pdest::Ptr{UInt8}, psrc::Ptr{UInt8}, nb::Csize_t)::Cvoid
+end
+
+function memcpy_mat(pdest::Ptr{UInt8}, psrc::Ptr{UInt8}, nb::Int64)
+    @ccall memcpy(pdest::Ptr{UInt8}, psrc::Ptr{UInt8}, nb::Int64)::Cvoid
+end
+
 function uds_socket()
     fd = @ccall "Ws2_32.dll".socket(
         AF_UNIX::Cint, 
@@ -104,7 +112,7 @@ function uds_accept(socket_fd::FD_TYPE)
     if client_fd != INVALID_SOCKET
         return client_fd
     end
-    
+
     throw("Error at accepting client socket")
 end
 
@@ -167,7 +175,7 @@ end
 @noinline function write!(socket::BufferedUDS, data::Ptr{UInt8}, nb::Int64)
     out = socket.output
     bw = min(length(out.data) - out.available, nb);
-    Base.memcpy(pointer(out.data) + out.available, data, bw);
+    memcpy_mat(pointer(out.data) + out.available, data, bw);
     out.available += bw
 
     if (bw >= nb) 
@@ -187,7 +195,7 @@ end
     if (bw < nb) 
         out.position  = 0
         out.available = nb - bw
-        Base.memcpy(pointer(out.data), data+bw, out.available);
+        memcpy_mat(pointer(out.data), data+bw, out.available);
     end
     nothing
 end
@@ -223,7 +231,7 @@ end
     while (br < nb)
         if (in.available - in.position > 0) 
             brn = min(in.available - in.position, nb - br)
-            Base.memcpy(data + br, pointer(in.data) + in.position, brn)
+            memcpy_mat(data + br, pointer(in.data) + in.position, brn)
             in.position += brn
             br += brn
         elseif (nb - br >= length(in.data))
