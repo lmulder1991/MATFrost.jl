@@ -168,7 +168,7 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
             if jlo.status == "SUCCESFUL"
                 varargout{1} = jlo.value;
             elseif jlo.status =="ERROR"
-                throw(jlo.value)
+                throw(MException("matfrostjulia:error", jlo.value))
             end
 
         end
