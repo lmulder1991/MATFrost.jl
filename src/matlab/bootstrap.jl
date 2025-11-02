@@ -2,6 +2,8 @@
 The bootstrap script for launching the matfrostserver.
 """
 
+println("Starting MATFrost server")
+
 try
     using MATFrost
 catch _

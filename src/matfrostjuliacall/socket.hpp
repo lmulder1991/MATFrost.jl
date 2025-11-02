@@ -113,7 +113,9 @@ namespace MATFrost::Socket {
 
         int write_to_socket(const uint8_t *data, const size_t nb) {
 
-            wait_for_writable();
+            if (!wait_for_writable(timeout)) {
+                throw matlab::engine::MATLABException("Write socket timeout: " + std::to_string(timeout.tv_sec) + " seconds");
+            }
 
             int sent = send(socket_fd,
                 reinterpret_cast<const char*>(data),
@@ -196,7 +198,7 @@ namespace MATFrost::Socket {
             throw matlab::engine::MATLABException("Socket error:");
         }
 
-        void wait_for_writable() const {
+        bool wait_for_writable(timeval time_out) const {
             if (socket_fd == INVALID_SOCKET) {
                 throw matlab::engine::MATLABException("Invalid socket");
             }
@@ -210,7 +212,7 @@ namespace MATFrost::Socket {
 
 
 
-            int result = select(0, nullptr, &write_set, &error_set, &timeout);
+            int result = select(0, nullptr, &write_set, &error_set, &time_out);
 
             if (result == SOCKET_ERROR) {
                 
@@ -220,7 +222,8 @@ namespace MATFrost::Socket {
 
             if (result == 0) {
                 // Timeout
-                throw matlab::engine::MATLABException("Write socket timeout: " + std::to_string(timeout.tv_sec) + " seconds");
+                return false;
+
             }
 
             // Check for errors first
@@ -239,7 +242,7 @@ namespace MATFrost::Socket {
                 }
                 
                 if (error == 0) {
-                    return;
+                    return true;
                 }
             }
             throw matlab::engine::MATLABException("Socket error");
@@ -288,7 +291,7 @@ namespace MATFrost::Socket {
         }
 
 
-        static std::shared_ptr<BufferedUnixDomainSocket> connect_socket(const std::string socket_path, const long timeout_ms) {
+        static std::shared_ptr<BufferedUnixDomainSocket> connect_socket(const std::string socket_path, const std::shared_ptr<MATFrostServer> server, std::shared_ptr<matlab::engine::MATLABEngine> matlab, const long timeout_ms) {
             if (!wsa_initialized) {
                 int rc = WSAStartup(MAKEWORD(2, 2), &wsa_data);
                 if (rc != 0) {
@@ -302,11 +305,15 @@ namespace MATFrost::Socket {
             strncpy_s(socket_addr.sun_path, sizeof socket_addr.sun_path,
                       socket_path.c_str(), socket_path.length());
 
-            timeval timeout;
-            timeout.tv_sec = timeout_ms / 1000;
-            timeout.tv_usec = (timeout_ms % 1000) * 1000;
+
 
             for (int attempt = 0; attempt < 400; attempt++) {
+
+                if (!server->is_alive()) {
+                    server->dump_logging(matlab);
+                    throw(matlab::engine::MATLABException("MATFrost server not running"));
+                }
+
                 SOCKET socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
 
                 if (socket_fd == INVALID_SOCKET) {
@@ -319,10 +326,19 @@ namespace MATFrost::Socket {
                                 sizeof(socket_addr));
 
                 if (rc == 0) {
+
                     // Connection succeeded immediately
+                    timeval timeout;
+                    timeout.tv_sec = timeout_ms / 1000;
+                    timeout.tv_usec = (timeout_ms % 1000) * 1000;
+
+                    server->dump_logging(matlab);
                     return std::make_shared<BufferedUnixDomainSocket>(socket_path, socket_fd, timeout, timeout_ms);
                 }
                 closesocket(socket_fd);
+
+                server->dump_logging(matlab);
+
                 Sleep(100);
             }
             throw(matlab::engine::MATLABException("Connection timeout after " +

@@ -20,8 +20,8 @@ using matlab::mex::ArgumentList;
 
 #include <chrono>
 
-#include "socket.hpp"
 #include "server.hpp"
+#include "socket.hpp"
 #include "write.hpp"
 
 #include "read.hpp"
@@ -70,8 +70,14 @@ public:
             const std::string socket_path = static_cast<const matlab::data::StringArray>(input["socket"])[0];
             const uint64_t timeout = static_cast<const matlab::data::TypedArray<uint64_t>>(input["timeout"])[0];
 
+            if ( matfrost_server.find(id) == matfrost_server.end()) {
+                throw(matlab::engine::MATLABException("MATFrost server not started"));
+            }
+
             if (matfrost_connections.find(id) == matfrost_connections.end()) {
-                auto socket = MATFrost::Socket::BufferedUnixDomainSocket::connect_socket(socket_path, static_cast<long>(timeout));
+                auto server = matfrost_server[id];
+                auto matlab = getEngine();
+                auto socket = MATFrost::Socket::BufferedUnixDomainSocket::connect_socket(socket_path, server, matlab, static_cast<long>(timeout));
                 matfrost_connections[id] = socket;
             }
         }
@@ -87,27 +93,26 @@ public:
             const matlab::data::StringArray fully_qualified_name = input["fully_qualified_name"];
             const matlab::data::CellArray args = input["args"];
 
-            if (matfrost_connections.find(id) == matfrost_connections.end() || matfrost_server.find(id) == matfrost_server.end()) {
-
-            } else {
-
-                auto socket = matfrost_connections[id];
-                auto server = matfrost_server[id];
-
-                matlab::data::ArrayFactory factory;
-
-                matlab::data::StructArray callmeta = factory.createStructArray({1}, {"fully_qualified_name"});
-                callmeta[0]["fully_qualified_name"] = fully_qualified_name;
-
-                matlab::data::CellArray callstruct = factory.createCellArray({2});
-                callstruct[0] = callmeta;
-                callstruct[1] = args;
-
-                outputs[0] = juliacall(socket, server, callstruct);
-
-
+            if ( matfrost_server.find(id) == matfrost_server.end()) {
+                throw(matlab::engine::MATLABException("MATFrost server not started"));
+            }
+            if (matfrost_connections.find(id) == matfrost_connections.end()) {
+                throw(matlab::engine::MATLABException("MATFrost server not connected"));
             }
 
+            auto socket = matfrost_connections[id];
+            auto server = matfrost_server[id];
+
+            matlab::data::ArrayFactory factory;
+
+            matlab::data::StructArray callmeta = factory.createStructArray({1}, {"fully_qualified_name"});
+            callmeta[0]["fully_qualified_name"] = fully_qualified_name;
+
+            matlab::data::CellArray callstruct = factory.createCellArray({2});
+            callstruct[0] = callmeta;
+            callstruct[1] = args;
+
+            outputs[0] = juliacall(socket, server, callstruct);
 
         }
 
@@ -115,7 +120,6 @@ public:
     }
 
     matlab::data::Array juliacall(const std::shared_ptr<MATFrost::Socket::BufferedUnixDomainSocket> socket, const std::shared_ptr<MATFrost::MATFrostServer> server, const matlab::data::Array callstruct) {
-
 
         auto matlab = getEngine();
         server->dump_logging(matlab);
@@ -146,8 +150,6 @@ public:
         }
 
         throw(matlab::engine::MATLABException("MATFrost server timeout"));
-
-
 
     }
 

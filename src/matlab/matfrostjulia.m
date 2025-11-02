@@ -106,7 +106,6 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
             else
                 matfrostjuliacall(createstruct);
             end
-            disp("Started");
         end
 
 
@@ -126,7 +125,6 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
                 matfrostjuliacall(connectstruct);
             end
 
-            disp("Connected");
         end
 
         function delete(obj)

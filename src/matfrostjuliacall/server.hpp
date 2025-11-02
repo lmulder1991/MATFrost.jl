@@ -18,6 +18,7 @@
 #include <array>
 
 namespace MATFrost {
+
     class MATFrostServer {
 
     public:
@@ -95,9 +96,14 @@ namespace MATFrost {
 
 
         void dump_logging(std::shared_ptr<matlab::engine::MATLABEngine> matlab) {
+
             if (bytes_available(h_stdouterr) > 0) {
+
                 matlab::data::ArrayFactory factory;
                 std::string logging = read_string(h_stdouterr);
+                if (logging.size() == 0) {
+                    return;
+                }
                 matlab->feval(u"disp", 0, std::vector<matlab::data::Array>
                   ({factory.createScalar(logging)}));
                 // return read_string(h_stdouterr);
