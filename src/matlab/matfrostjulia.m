@@ -10,6 +10,8 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
 % - Leveraging Julia environments for reproducible builds.
 % - Julia runs in its own mexhost process.
 
+
+
     properties (SetAccess=immutable)
         julia             (1,1) string
     end
@@ -21,6 +23,10 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
         project           (1,1) string
         socket            (1,1) string
         timeout           (1,1) uint64
+    end
+
+    properties (Constant)
+        USE_MEXHOST (1,1) logical = false
     end
 
     methods
@@ -70,7 +76,6 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
             obj.start_server();
             obj.connect_server();
 
-
         end
 
 
@@ -96,8 +101,11 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
             createstruct.cmdline = sprintf("""%s"" %s ""%s"" ""%s""", obj.julia, project, bootstrap, obj.socket);
             createstruct.socket = obj.socket;
             
-            obj.mh.feval("matfrostjuliacall", createstruct);
-            % pause(30);
+            if obj.USE_MEXHOST
+                obj.mh.feval("matfrostjuliacall", createstruct);
+            else
+                matfrostjuliacall(createstruct);
+            end
             disp("Started");
         end
 
@@ -112,7 +120,11 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
             connectstruct.timeout = obj.timeout;
 
          
-            obj.mh.feval("matfrostjuliacall", connectstruct);
+            if obj.USE_MEXHOST
+                obj.mh.feval("matfrostjuliacall", connectstruct);
+            else
+                matfrostjuliacall(connectstruct);
+            end
 
             disp("Connected");
         end
@@ -123,7 +135,11 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
             destroystruct.id = obj.id;
             destroystruct.action = "STOP";
 
-            obj.mh.feval("matfrostjuliacall", destroystruct);
+            if obj.USE_MEXHOST
+                obj.mh.feval("matfrostjuliacall", destroystruct);
+            else
+                matfrostjuliacall(destroystruct);
+            end
         end
     end
    
@@ -145,7 +161,11 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
             callstruct.args    = args(:);
 
 
-            jlo = obj.mh.feval("matfrostjuliacall", callstruct);
+            if obj.USE_MEXHOST
+                jlo = obj.mh.feval("matfrostjuliacall", callstruct);
+            else
+                jlo = matfrostjuliacall(callstruct);
+            end
             
             if jlo.status == "SUCCESFUL"
                 varargout{1} = jlo.value;

@@ -23,9 +23,10 @@ namespace MATFrost {
     public:
 
         PROCESS_INFORMATION process_information;
+        HANDLE h_stdouterr;
 
-        MATFrostServer(PROCESS_INFORMATION process_information) :
-            process_information(process_information)
+        MATFrostServer(PROCESS_INFORMATION process_information, HANDLE h_stdout, HANDLE h_stdouterr) :
+            process_information(process_information), h_stdouterr(h_stdouterr)
         {
 
         }
@@ -54,6 +55,58 @@ namespace MATFrost {
             return exit_code == STILL_ACTIVE;
         }
 
+
+
+
+        static DWORD bytes_available(HANDLE handle) {
+            DWORD bytes_available = 0;
+            BOOL result = PeekNamedPipe(handle, nullptr, 0, nullptr, &bytes_available, nullptr);
+            if (result != 0) {
+                return bytes_available;
+            } else {
+                return -1;
+            }
+        }
+
+        static std::string read_string(HANDLE handle) {
+            DWORD ba = bytes_available(handle);
+            if (ba == 0) {
+                return "";
+            }
+
+            std::string buffer;
+            buffer.resize(ba);
+
+            DWORD bytes_read = 0;
+            BOOL result = ReadFile(
+                handle,
+                &buffer[0],
+                ba,
+                &bytes_read,
+                nullptr
+            );
+
+            if (!result || bytes_read == 0) {
+                return "";
+            }
+
+            buffer.resize(bytes_read);
+            return buffer;
+        }
+
+
+
+        void dump_logging(std::shared_ptr<matlab::engine::MATLABEngine> matlab) {
+            if (bytes_available(h_stdouterr) > 0) {
+                matlab::data::ArrayFactory factory;
+                std::string logging = read_string(h_stdouterr);
+                matlab->feval(u"disp", 0, std::vector<matlab::data::Array>
+                  ({factory.createScalar(logging)}));
+                // return read_string(h_stdouterr);
+            }
+
+        }
+
         static std::shared_ptr<MATFrostServer> spawn(const std::string cmdline) {
 
             SECURITY_ATTRIBUTES saAttr;
@@ -71,16 +124,28 @@ namespace MATFrost {
 
             // Set up members of the PROCESS_INFORMATION structure.
 
+            // HANDLE h_stdin[2];
+            HANDLE h_stdouterr[2];
+            if (!CreatePipe(&h_stdouterr[0], &h_stdouterr[1], &saAttr, 0)) {
+                throw matlab::engine::MATLABException("CreatePipe failed");
+            }
+            SetHandleInformation(h_stdouterr[0], HANDLE_FLAG_INHERIT, 0);
+
+
+            // // Ensure read handle is not inherited
+            // BOOL a = false;
+
+
 
             siStartInfo.cb = sizeof(STARTUPINFO);
             // siStartInfo.hStdInput = h_stdin[0];
-            // siStartInfo.hStdOutput = h_stdout[1];
-            // siStartInfo.hStdError  = h_stderr[1];
+            siStartInfo.hStdOutput = h_stdouterr[1];
+            siStartInfo.hStdError  = h_stdouterr[1];
             siStartInfo.dwFlags |= STARTF_USESTDHANDLES;
 
             // Create the child process.
 
-            CreateProcessA(
+            if (!CreateProcessA(
               nullptr,
               &cmdline_pipes[0],   // command line
               nullptr,       // process security attributes
@@ -90,9 +155,14 @@ namespace MATFrost {
               nullptr,       // use parent's environment
               nullptr,       // use parent's current directory
               &siStartInfo,  // STARTUPINFO pointer
-              &piProcInfo);  // receives PROCESS_INFORMATION
+              &piProcInfo)  // receives PROCESS_INFORMATION
+            ) {
+                throw matlab::engine::MATLABException("Julia process could not be started.");
+            }
 
-            return std::make_shared<MATFrostServer>(piProcInfo);
+            CloseHandle(h_stdouterr[1]);
+
+            return std::make_shared<MATFrostServer>(piProcInfo, h_stdouterr[0], h_stdouterr[0]);
 
 
         }

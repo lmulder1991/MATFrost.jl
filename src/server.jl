@@ -211,6 +211,11 @@ end
 
 function MATFrost.matfrostserve(socket_path::String)
 
+
+    # p_stdouterr = Pipe()
+    # redirect_stderr(p_stdouterr)
+    # redirect_stdout(p_stdouterr)
+
     server_socket_fd = setup_uds_server(socket_path)
     bufin = Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0)
     bufout = Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0)
@@ -249,6 +254,20 @@ function MATFrost.matfrostserve(socket_path::String)
 
 end
 
+
+function setstdhandle()
+    nstdhandle = Cint(-11)
+    handle = C_NULL
+    @ccall "Kernel32.dll".SetStdHandle(
+        nstdhandle::Cint, 
+        handle::Ptr{Cvoid})::Cint
+end
+
+function getstdhandle()
+    nstdhandle = Cint(-11)
+    @ccall "Kernel32.dll".GetStdHandle(
+        nstdhandle::Cint)::Ptr{Cvoid}
+end
 
 
 macro MATFrost.matfrostserve(socket_path)

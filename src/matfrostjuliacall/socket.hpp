@@ -121,7 +121,7 @@ namespace MATFrost::Socket {
             } else if (sent == 0) {
                 throw matlab::engine::MATLABException("Connection closed");
             } else {
-                throw matlab::engine::MATLABException("Send error: " +
+                throw matlab::engine::MATLABException("Socket send error: " +
                                        std::to_string(WSAGetLastError()));
             }
 
@@ -129,9 +129,7 @@ namespace MATFrost::Socket {
 
         int read_from_socket(uint8_t *data, const int nb) {
             // Use select to wait for data with timeout
-            if (!wait_for_readable()) {  // 5 second timeout
-                throw matlab::engine::MATLABException("Read timeout: no data available");
-            }
+            wait_for_readable();
 
             auto brn = recv(
                         socket_fd,
@@ -148,9 +146,9 @@ namespace MATFrost::Socket {
             }
         }
 
-        bool wait_for_readable() const {
+        void wait_for_readable() const {
             if (socket_fd == INVALID_SOCKET) {
-                return false;
+                throw matlab::engine::MATLABException("Invalid socket");
             }
 
             fd_set read_set, error_set;
@@ -164,17 +162,17 @@ namespace MATFrost::Socket {
             int result = select(0, &read_set, nullptr, &error_set, &timeout);
 
             if (result == SOCKET_ERROR) {
-                return false;
+                throw matlab::engine::MATLABException("Socket error: " + std::to_string(WSAGetLastError()));
             }
 
             if (result == 0) {
                 // Timeout
-                return false;
+                throw matlab::engine::MATLABException("Read-timeout: " + std::to_string(timeout.tv_sec) + " seconds");
             }
 
             // Check for errors
             if (FD_ISSET(socket_fd, &error_set)) {
-                return false;
+                throw matlab::engine::MATLABException("Socket error:");
             }
 
             // Check if data is available
@@ -184,12 +182,11 @@ namespace MATFrost::Socket {
                 int peek_result = recv(socket_fd, buf, 1, MSG_PEEK);
                 if (peek_result == 0) {
                     // EOF - connection closed
-                    return false;
+                    throw matlab::engine::MATLABException("Socket - EOF connection closed");
                 }
-                return true;
+                return;
             }
-
-            return false;
+            throw matlab::engine::MATLABException("Socket error:");
         }
 
         bool wait_for_writable() const {

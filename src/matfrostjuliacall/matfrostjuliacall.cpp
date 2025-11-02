@@ -31,12 +31,11 @@ using matlab::mex::ArgumentList;
 
 #define EXPERIMENT_SIZE 1000000
 
+std::map<uint64_t, std::shared_ptr<MATFrost::MATFrostServer>> matfrost_server{};
+std::map<uint64_t, std::shared_ptr<MATFrost::Socket::BufferedUnixDomainSocket>> matfrost_connections{};
 
 class MexFunction : public matlab::mex::Function {
 private:
-
-    std::map<uint64_t, std::shared_ptr<MATFrost::MATFrostServer>> matfrost_server{};
-    std::map<uint64_t, std::shared_ptr<MATFrost::Socket::BufferedUnixDomainSocket>> matfrost_connections{};
 
 
 
@@ -80,16 +79,20 @@ public:
             if (matfrost_connections.find(id) != matfrost_connections.end()) {
                 matfrost_connections.erase(id);
             }
+            if (matfrost_server.find(id) != matfrost_server.end()) {
+                matfrost_server.erase(id);
+            }
         }
         else if (action == u"CALL") {
             const matlab::data::StringArray fully_qualified_name = input["fully_qualified_name"];
             const matlab::data::CellArray args = input["args"];
 
-            if (matfrost_connections.find(id) == matfrost_connections.end()) {
+            if (matfrost_connections.find(id) == matfrost_connections.end() || matfrost_server.find(id) == matfrost_server.end()) {
 
             } else {
 
                 auto socket = matfrost_connections[id];
+                auto server = matfrost_server[id];
 
                 matlab::data::ArrayFactory factory;
 
@@ -100,12 +103,10 @@ public:
                 callstruct[0] = callmeta;
                 callstruct[1] = args;
 
-                outputs[0] = juliacall(socket, callstruct);
+                outputs[0] = juliacall(socket, server, callstruct);
 
 
             }
-
-
 
 
         }
@@ -113,18 +114,26 @@ public:
 
     }
 
-    matlab::data::Array juliacall(const std::shared_ptr<MATFrost::Socket::BufferedUnixDomainSocket> socket, const matlab::data::Array callstruct) {
-        matlab::data::ArrayFactory factory;
+    matlab::data::Array juliacall(const std::shared_ptr<MATFrost::Socket::BufferedUnixDomainSocket> socket, const std::shared_ptr<MATFrost::MATFrostServer> server, const matlab::data::Array callstruct) {
 
+
+        auto matlab = getEngine();
+        server->dump_logging(matlab);
+
+        matlab::data::ArrayFactory factory;
         if (!socket->is_connected()) {
             throw(matlab::engine::MATLABException("MATFrost server disconnected"));
         }
 
-        MATFrost::Write::write(socket, callstruct);
 
+        MATFrost::Write::write(socket, callstruct);
         socket->flush();
 
-        return MATFrost::Read::read(socket);
+        auto jlout = MATFrost::Read::read(socket);
+
+        server->dump_logging(matlab);
+
+        return jlout;
 
 
     }
