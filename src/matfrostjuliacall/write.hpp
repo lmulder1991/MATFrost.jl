@@ -177,4 +177,88 @@ namespace MATFrost::Write {
          }
     }
 
+    bool valid(const matlab::data::Array arr);
+
+    bool valid_struct(const matlab::data::StructArray msarr) {
+
+        for (const matlab::data::Struct mats: msarr){
+            for (const matlab::data::Array arr: mats) {
+                valid(arr);
+            }
+        }
+        return true;
+    }
+
+    bool valid_cell(const matlab::data::CellArray mcarr) {
+        for (const matlab::data::Array arr: mcarr) {
+            valid(arr);
+        }
+        return true;
+    }
+
+    bool valid(const matlab::data::Array arr) {
+        switch (arr.getType()) {
+             case matlab::data::ArrayType::CELL:
+                 return valid_cell(arr);
+             case matlab::data::ArrayType::STRUCT:
+                return valid_struct(arr);
+
+             case matlab::data::ArrayType::MATLAB_STRING:
+
+             case matlab::data::ArrayType::LOGICAL:
+
+             case matlab::data::ArrayType::SINGLE:
+             case matlab::data::ArrayType::DOUBLE:
+
+             case matlab::data::ArrayType::INT8:
+             case matlab::data::ArrayType::UINT8:
+             case matlab::data::ArrayType::INT16:
+             case matlab::data::ArrayType::UINT16:
+             case matlab::data::ArrayType::INT32:
+             case matlab::data::ArrayType::UINT32:
+             case matlab::data::ArrayType::INT64:
+             case matlab::data::ArrayType::UINT64:
+
+             case matlab::data::ArrayType::COMPLEX_SINGLE:
+             case matlab::data::ArrayType::COMPLEX_DOUBLE:
+
+             case matlab::data::ArrayType::COMPLEX_UINT8:
+             case matlab::data::ArrayType::COMPLEX_INT8:
+             case matlab::data::ArrayType::COMPLEX_UINT16:
+             case matlab::data::ArrayType::COMPLEX_INT16:
+             case matlab::data::ArrayType::COMPLEX_UINT32:
+             case matlab::data::ArrayType::COMPLEX_INT32:
+             case matlab::data::ArrayType::COMPLEX_UINT64:
+             case matlab::data::ArrayType::COMPLEX_INT64:
+                 return true;
+
+             // Unspported
+             default:
+                 std::u16string mattype;
+                 switch (arr.getType()) {
+                     case matlab::data::ArrayType::CHAR:
+                         mattype = u"char"; break;
+                     case matlab::data::ArrayType::OBJECT:
+                         mattype = u"object"; break;
+                     case matlab::data::ArrayType::VALUE_OBJECT:
+                         mattype = u"value object"; break;
+                     case matlab::data::ArrayType::HANDLE_OBJECT_REF:
+                         mattype = u"handle object ref"; break;
+                     case matlab::data::ArrayType::ENUM:
+                         mattype = u"enum"; break;
+                     case matlab::data::ArrayType::SPARSE_LOGICAL:
+                         mattype = u"sparse logical"; break;
+                     case matlab::data::ArrayType::SPARSE_DOUBLE:
+                         mattype = u"sparse double"; break;
+                     case matlab::data::ArrayType::SPARSE_COMPLEX_DOUBLE:
+                         mattype = u"sparse complex double"; break;
+                     default:
+                         mattype = u"unknown"; break;
+
+                 }
+                 throw matlab::engine::MATLABException("matfrostjulia:conversion:typeNotSupported", u"MATFrost does not support conversions of MATLAB type: " + mattype);
+
+         }
+    }
+
 }

@@ -112,6 +112,8 @@ public:
             callstruct[0] = callmeta;
             callstruct[1] = args;
 
+            MATFrost::Write::valid(callstruct);
+
             try {
                 outputs[0] = juliacall(socket, server, callstruct);
             } catch (matlab::engine::MATLABException& e) {
