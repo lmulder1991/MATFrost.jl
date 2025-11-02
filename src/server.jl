@@ -157,84 +157,84 @@ end
 
 
 
-function connect()
-    uds_init()
+# function connect()
+#     uds_init()
 
-    println("WSA setup")
+#     println("WSA setup")
 
-    socket_fd = uds_socket()
+#     socket_fd = uds_socket()
 
-    println("Made socket")
+#     println("Made socket")
 
-    path = raw"C:\Users\jbelier\Documents\test_matfrost3.sock"
+#     path = raw"C:\Users\jbelier\Documents\test_matfrost3.sock"
 
-    rc_connect = uds_connect(socket_fd, path)
+#     rc_connect = uds_connect(socket_fd, path)
 
-    while rc_connect == -1
-        println(rc_connect)
-        sleep(1)
+#     while rc_connect == -1
+#         println(rc_connect)
+#         sleep(1)
         
-        socket_fd = uds_socket()
+#         socket_fd = uds_socket()
 
-        println("Made socket")
+#         println("Made socket")
     
-        rc_connect = uds_connect(socket_fd, path)
-    end
+#         rc_connect = uds_connect(socket_fd, path)
+#     end
 
 
-    # function uds_socket()
-    vsize = Ref{Cint}()
-    optlen = Ref{Cint}(4)
-    @ccall "Ws2_32.dll".getsockopt(
-        socket_fd::FD_TYPE, 
-        Cint(0xffff)::Cint,
-        Cint(0x1001)::Cint,
-        vsize::Ref{Cint},
-        optlen::Ref{Cint})::Cint
+#     # function uds_socket()
+#     vsize = Ref{Cint}()
+#     optlen = Ref{Cint}(4)
+#     @ccall "Ws2_32.dll".getsockopt(
+#         socket_fd::FD_TYPE, 
+#         Cint(0xffff)::Cint,
+#         Cint(0x1001)::Cint,
+#         vsize::Ref{Cint},
+#         optlen::Ref{Cint})::Cint
 
-    println("Send size: $(vsize[])")    
+#     println("Send size: $(vsize[])")    
     
-    @ccall "Ws2_32.dll".getsockopt(
-        socket_fd::FD_TYPE, 
-        Cint(0xffff)::Cint,
-        Cint(0x1002)::Cint,
-        vsize::Ref{Cint},
-        optlen::Ref{Cint})::Cint
+#     @ccall "Ws2_32.dll".getsockopt(
+#         socket_fd::FD_TYPE, 
+#         Cint(0xffff)::Cint,
+#         Cint(0x1002)::Cint,
+#         vsize::Ref{Cint},
+#         optlen::Ref{Cint})::Cint
 
-    println("Recieve size: $(vsize[])")
+#     println("Recieve size: $(vsize[])")
+
+# # end
+
+# #     int WSAAPI getsockopt(
+# #   [in]      SOCKET s,
+# #   [in]      int    level,
+# #   [in]      int    optname,
+# #   [out]     char   *optval,
+# #   [in, out] int    *optlen
+# # );
+
+#     socket = BufferedUDS(
+#         socket_fd, 
+#         Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0),
+#         Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0))
+    
+#     callstruct = (
+#         (fully_qualified_name="MATFrost._Server.matfrosttest",),
+#         (12.0,)
+#     )
+    
+#     println("Writing")
+#     write_matfrostarray!(socket, callstruct)
+#     flush!(socket)
+    
+#     println("Written")
+#     out = read_matfrostarray!(socket)
+
+#     println(out)
+
+#     uds_close(socket_fd)
 
 # end
-
-#     int WSAAPI getsockopt(
-#   [in]      SOCKET s,
-#   [in]      int    level,
-#   [in]      int    optname,
-#   [out]     char   *optval,
-#   [in, out] int    *optlen
-# );
-
-    socket = BufferedUDS(
-        socket_fd, 
-        Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0),
-        Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0))
-    
-    callstruct = (
-        (fully_qualified_name="MATFrost._Server.matfrosttest",),
-        (12.0,)
-    )
-    
-    println("Writing")
-    write_matfrostarray!(socket, callstruct)
-    flush!(socket)
-    
-    println("Written")
-    out = read_matfrostarray!(socket)
-
-    println(out)
-
-    uds_close(socket_fd)
-
-end
 
 # matfrostserve() = matfrostserve(raw"C:\Users\jbelier\Documents\test_matfrost3.sock")
 

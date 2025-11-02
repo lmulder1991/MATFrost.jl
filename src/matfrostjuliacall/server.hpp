@@ -101,7 +101,7 @@ namespace MATFrost {
             if (bytes_available(h_stdouterr) > 0) {
 
                 matlab::data::ArrayFactory factory;
-                std::string logging = read_string(h_stdouterr);
+                std::u16string logging = matlab::engine::convertUTF8StringToUTF16String(read_string(h_stdouterr));
                 if (logging.size() == 0) {
                     return;
                 }

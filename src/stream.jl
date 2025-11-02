@@ -11,21 +11,33 @@ const SOCK_STREAM = Cint(1)
 const SOMAXCONN = Cint(0x7fffffff)
 
 const FD_TYPE = UInt64
+const INVALID_SOCKET = UInt64(0)
 
 const SOCKADDR_UN = @NamedTuple{sun_family::UInt16, sun_path::NTuple{256,UInt8}}
 
 function uds_socket()
-    @ccall "Ws2_32.dll".socket(
+    fd = @ccall "Ws2_32.dll".socket(
         AF_UNIX::Cint, 
         SOCK_STREAM::Cint, 
         Int32(0)::Cint)::FD_TYPE
+
+    if fd != INVALID_SOCKET
+        return fd
+    end
+
+    throw("Cannot start socket")
 end
 
 function uds_init()
     wsadata=Ref{NTuple{408, UInt8}}()
-    @ccall "Ws2_32.dll".WSAStartup(
+    rc = @ccall "Ws2_32.dll".WSAStartup(
         reinterpret(UInt16, (UInt8(2),UInt8(2)))::UInt16, 
         wsadata::Ref{NTuple{408, UInt8}})::Cint
+
+    if rc != 0 
+        throw("WSAStartup failed: $(rc)");
+    end
+
 end
 
 function uds_bind(socket_fd::FD_TYPE, path::String)
@@ -43,10 +55,14 @@ function uds_bind(socket_fd::FD_TYPE, path::String)
     socket_addr = SOCKADDR_UN((UInt16(AF_UNIX), sun_path))
 
     socket_addr_ref = Ref{SOCKADDR_UN}(socket_addr)
-    @ccall "Ws2_32.dll".bind(
+    rc = @ccall "Ws2_32.dll".bind(
         socket_fd::FD_TYPE, 
         socket_addr_ref::Ref{SOCKADDR_UN}, 
         Cint(sizeof(SOCKADDR_UN))::Cint)::Cint
+
+    if rc != 0
+        throw("Cannot bind to socket $(path)")
+    end
 end
 
 function uds_connect(socket_fd::FD_TYPE, path::String)
@@ -70,16 +86,26 @@ function uds_connect(socket_fd::FD_TYPE, path::String)
 end
 
 function uds_listen(socket_fd::FD_TYPE)
-    @ccall "Ws2_32.dll".listen(
+    rc = @ccall "Ws2_32.dll".listen(
         socket_fd::FD_TYPE, 
         SOMAXCONN::Cint)::Cint
+
+    if rc != 0
+        throw("Cannot listen to socket")
+    end
 end
 
 function uds_accept(socket_fd::FD_TYPE)
-    @ccall "Ws2_32.dll".accept(
+    client_fd = @ccall "Ws2_32.dll".accept(
         socket_fd::FD_TYPE,
         C_NULL::Ptr{Cvoid},
         C_NULL::Ptr{Cvoid})::FD_TYPE
+
+    if client_fd != INVALID_SOCKET
+        return client_fd
+    end
+    
+    throw("Error at accepting client socket")
 end
 
 function uds_read(socket_fd::FD_TYPE, data::Ptr{UInt8}, nb::Int64)
