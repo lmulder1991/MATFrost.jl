@@ -51,6 +51,7 @@ namespace MATFrost::Read {
         }
         return strarr;
     }
+
     matlab::data::Array read_cell(const std::shared_ptr<Socket::BufferedUnixDomainSocket> socket, matlab::data::ArrayDimensions dims) {
         matlab::data::ArrayFactory factory;
 

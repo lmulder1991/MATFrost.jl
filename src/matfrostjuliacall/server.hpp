@@ -43,6 +43,7 @@ namespace MATFrost {
 
             CloseHandle(process_information.hProcess);
             CloseHandle(process_information.hThread);
+            CloseHandle(h_stdouterr);
 
             // Close handles to the stdin and stdout pipes no longer needed by the child process.
             // If they are not explicitly closed, there is no way to recognize that the child process has ended.
@@ -135,9 +136,6 @@ namespace MATFrost {
             }
             SetHandleInformation(h_stdouterr[0], HANDLE_FLAG_INHERIT, 0);
 
-
-            // // Ensure read handle is not inherited
-            // BOOL a = false;
 
 
 

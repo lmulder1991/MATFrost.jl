@@ -26,7 +26,6 @@ using matlab::mex::ArgumentList;
 
 #include "read.hpp"
 
-// #include "controller.hpp"
 
 
 #define EXPERIMENT_SIZE 1000000
