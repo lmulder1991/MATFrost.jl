@@ -121,19 +121,32 @@ public:
         server->dump_logging(matlab);
 
         matlab::data::ArrayFactory factory;
+
         if (!socket->is_connected()) {
             throw(matlab::engine::MATLABException("MATFrost server disconnected"));
         }
 
-
         MATFrost::Write::write(socket, callstruct);
         socket->flush();
 
-        auto jlout = MATFrost::Read::read(socket);
+        size_t niters = socket->timeout_ms / 100+1;
 
-        server->dump_logging(matlab);
+        timeval timeout{0, 100000}; // 100ms
 
-        return jlout;
+        for (size_t i = 0; i < niters; i++) {
+            if (!socket->wait_for_readable(timeout)) {
+                server->dump_logging(matlab);
+            } else {
+                auto jlout = MATFrost::Read::read(socket);
+
+                server->dump_logging(matlab);
+
+                return jlout;
+            }
+        }
+
+        throw(matlab::engine::MATLABException("MATFrost server timeout"));
+
 
 
     }

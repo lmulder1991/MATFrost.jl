@@ -25,7 +25,7 @@ namespace MATFrost {
         PROCESS_INFORMATION process_information;
         HANDLE h_stdouterr;
 
-        MATFrostServer(PROCESS_INFORMATION process_information, HANDLE h_stdout, HANDLE h_stdouterr) :
+        MATFrostServer(PROCESS_INFORMATION process_information, HANDLE h_stdouterr) :
             process_information(process_information), h_stdouterr(h_stdouterr)
         {
 
@@ -54,8 +54,6 @@ namespace MATFrost {
             GetExitCodeProcess(process_information.hProcess, &exit_code);
             return exit_code == STILL_ACTIVE;
         }
-
-
 
 
         static DWORD bytes_available(HANDLE handle) {
@@ -162,7 +160,7 @@ namespace MATFrost {
 
             CloseHandle(h_stdouterr[1]);
 
-            return std::make_shared<MATFrostServer>(piProcInfo, h_stdouterr[0], h_stdouterr[0]);
+            return std::make_shared<MATFrostServer>(piProcInfo, h_stdouterr[0]);
 
 
         }
