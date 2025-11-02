@@ -67,6 +67,8 @@ function callsequence(socket::BufferedUDS)
         MATFrostResultMATLAB("SUCCESFUL", "", out)
 
     catch e
+        Base.showerror(stdout, e)
+        Base.show_backtrace(stdout, Base.catch_backtrace())
         MATFrostResultMATLAB("ERROR", "", e)
     end
 
@@ -150,14 +152,14 @@ end
 
 
 
-macro MATFrost.matfrostserve(socket_path)
-esc(quote
+# macro MATFrost.matfrostserve(socket_path)
+# esc(quote
 
-    MATFrost._Server.matfrostserve($socket_path)
+#     MATFrost._Server.matfrostserve($socket_path)
 
-end)
+# end)
 
-end
+# end
 
 
 
