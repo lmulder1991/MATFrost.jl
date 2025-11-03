@@ -21,38 +21,65 @@ end
 
 matfrosttest(x::Float64)=23*x
 
-function getfunction(meta::CallMeta)
-    syms = Symbol.(eachsplit(meta.fully_qualified_name,"."))
-
-    if length(syms) < 2
+function getMethod(meta::CallMeta)
+    m = match(r"^([^.]+)\.([^(]+)(\(.*\))?$", meta.fully_qualified_name)
+    if m === nothing
         throw("Incompatible fully_qualified_name")
     end
-    
-    packagename = syms[1]
+    (packagename, function_name, signature) = m.captures
     package = nothing
-    
+
     try
-        package = getfield(Main, packagename)
+        package = getfield(Main, Symbol(packagename))
     catch _
         try
-            Main.eval(:(import $packagename))
-            package = getfield(Main, packagename)
+            Main.eval(:(import $(Symbol(packagename))))
+            package = getfield(Main, Symbol(packagename))
         catch _
-            throw("Package not found")
+            throw("Package $(packagename) could not be imported")
         end
     end
 
     f = package
-    for i in 2:lastindex(syms)
+    function_symbols = Symbol.(split(function_name, "."))
+    for sym in function_symbols
         try
-            f = getfield(f, syms[i])
+            f = getfield(f, sym)
         catch _
-            throw("Function not found")
+            if isa(f, Function)
+                continue
+            else
+                throw(ErrorException("Function $sym not found"))
+            end
         end
     end
 
-    if length(methods(f)) != 1
-        throw("Multiple methods for function defintion found")
+    if length(methods(f)) !== 1 
+        if signature === nothing
+            error_msg = """
+            Ambiguous function call: The function $(f) has multiple methods.
+            Please specify the desired method signature.
+            
+            Available methods:
+            $(methods(f))
+            """
+            throw(ErrorException(error_msg))
+        else
+            pattern = Regex("^$(function_symbols[end])\\($signature\\)")
+            index = findfirst(m -> match(pattern, string(m)) !== nothing, methods(f))
+            if index === nothing
+                error_msg = """
+                No matching method found for function $(f) with signature $(signature).
+                
+                Available methods:
+                $(methods(f))
+                """
+                throw(ErrorException(error_msg))
+            end
+        end
+        f = methods(f)[index]
+    else
+        f = methods(f)[1]
     end
 
     return f
@@ -78,9 +105,9 @@ function callsequence(socket::BufferedUDS)
 
         callmeta = convert_matfrostarray(CallMeta, callstruct.values[1])
         
-        f = getfunction(callmeta)
+        f = getMethod(callmeta)
         
-        Args = Tuple{methods(f)[1].sig.types[2:end]...}
+        Args = Tuple{f.sig.types[2:end]...}
 
         args = convert_matfrostarray(Args, callstruct.values[2])
 
@@ -235,7 +262,7 @@ function matfrostserve(socket_path::String)
 
         catch e
             
-            open(raw"C:\Users\jbelier\Documents\matfrosttest\errored.txt", "w") do iof
+            open(raw"C:\Users\jlmulder\Documents\matfrosttest\errored.txt", "w") do iof
                 println(iof, e)
                 Base.showerror(iof, e)
                 Base.show_backtrace(iof, Base.catch_backtrace())
@@ -248,7 +275,6 @@ function matfrostserve(socket_path::String)
 
 
 end
-
 
 
 macro MATFrost.matfrostserve(matfrostin, matfrostout)

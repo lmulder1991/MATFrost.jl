@@ -6,6 +6,7 @@ include("primitives.jl")
 include("composites.jl")
 include("incompatible_datatypes.jl")
 include("read.jl")
+include("server.jl")
 
 
 
