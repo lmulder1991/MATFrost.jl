@@ -10,6 +10,8 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
 % - Leveraging Julia environments for reproducible builds.
 % - Julia runs in its own mexhost process.
 
+
+
     properties (SetAccess=immutable)
         julia             (1,1) string
     end
@@ -20,6 +22,11 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
         mh                     matlab.mex.MexHost
         project           (1,1) string
         socket            (1,1) string
+        timeout           (1,1) uint64
+    end
+
+    properties (Constant)
+        USE_MEXHOST (1,1) logical = false
     end
 
     methods
@@ -33,34 +40,38 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
                     % NOTE: Only needed if version is not specified.
                 argstruct.project     (1,1) string = ""
 
-                argstruct.socket      (1,1) string = ""
+                argstruct.socket      (1,1) string = string(tempname) + ".sock"
+
+                argstruct.timeout     (1,1) uint64 = 600e3 % 10 minutes
             end
             
-            % if isfield(argstruct, 'bindir')
-            %     bindir = argstruct.bindir;
-            % elseif isfield(argstruct, 'version')
-            %     bindir = juliaup(argstruct.version);
-            % else
-            %     [status, bindir] = shell('julia', '-e', 'print(Sys.BINDIR)');
-            %     assert(~status, "matfrostjulia:julia", ...
-            %             "Julia not found on PATH")
-            % end
-            % 
-            % if ispc
-            %     obj.julia = fullfile(bindir, "julia.exe");
-            % elseif isunix
-            %     error("matfrostjulia:osNotSupported", "Linux not supported yet.");
-            %     % obj.julia = fullfile(bindir, "julia");
-            % else
-            %     error("matfrostjulia:osNotSupported", "MacOS not supported yet.");
-            % end
-            % 
-            % obj.project = argstruct.project;
+            obj.id = uint64(randi(1e9, 'int32'));
             obj.socket = argstruct.socket;
-            
-            
-            obj.connect_server();
+            obj.timeout = argstruct.timeout;
 
+            if isfield(argstruct, 'bindir')
+                bindir = argstruct.bindir;
+            elseif isfield(argstruct, 'version')
+                bindir = juliaup(argstruct.version);
+            else
+                [status, bindir] = shell('julia', '-e', 'print(Sys.BINDIR)');
+                assert(~status, "matfrostjulia:julia", ...
+                        "Julia not found on PATH")
+            end
+
+
+            if ispc
+                obj.julia = fullfile(bindir, "julia.exe");
+            elseif isunix
+                error("matfrostjulia:osNotSupported", "Linux not supported yet.");
+                % obj.julia = fullfile(bindir, "julia");
+            else
+                error("matfrostjulia:osNotSupported", "MacOS not supported yet.");
+            end
+
+            
+            argstruct.socket
+            obj.start_server();
 
         end
 
@@ -68,32 +79,9 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
     end
 
     methods (Access=private)
-        function obj = connect_server(obj)
 
-            obj.id = uint64(randi(1e9, 'int32'));
-            obj.mh = mexhost();
+        function obj = start_server(obj)
 
-            % if ~isempty(obj.project)
-            %     project = sprintf("--project=""%s""", obj.project);
-            % else
-            %     project = "";
-            % end
-
-            % bootstrap = fullfile(fileparts(mfilename("fullpath")), "bootstrap.jl");
-
-            createstruct = struct;
-            createstruct.id = obj.id;
-            createstruct.action = "CONNECT";
-            createstruct.socket = obj.socket;
-         
-            obj.mh.feval("matfrostjuliacall", createstruct);
-
-            disp("Created");
-        end
-
-        function obj = spawn_server(obj)
-
-            obj.id = uint64(randi(1e9, 'int32'));
             obj.mh = mexhost();
 
             if ~isempty(obj.project)
@@ -106,22 +94,33 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
 
             createstruct = struct;
             createstruct.id = obj.id;
-            createstruct.action = "CREATE";
-            createstruct.cmdline = sprintf("""%s"" %s ""%s""", obj.julia, project, bootstrap);
-         
-            obj.mh.feval("matfrostjuliacall", createstruct);
-
-            disp("Created");
+            createstruct.action = "START";
+            createstruct.socket = obj.socket;
+            createstruct.timeout = obj.timeout;
+            createstruct.cmdline = sprintf("""%s"" %s ""%s"" ""%s""", obj.julia, project, bootstrap, obj.socket);
+            createstruct.socket = obj.socket;
+            
+            if obj.USE_MEXHOST
+                obj.mh.feval("matfrostjuliacall", createstruct);
+            else
+                matfrostjuliacall(createstruct);
+            end
         end
 
-        % function delete(obj)
-        % 
-        %     destroystruct = struct;
-        %     destroystruct.id = obj.id;
-        %     destroystruct.action = "DESTROY";
-        % 
-        %     obj.mh.feval("matfrostjuliacall", destroystruct);
-        % end
+
+
+        function delete(obj)
+
+            destroystruct = struct;
+            destroystruct.id = obj.id;
+            destroystruct.action = "STOP";
+
+            if obj.USE_MEXHOST
+                obj.mh.feval("matfrostjuliacall", destroystruct);
+            else
+                matfrostjuliacall(destroystruct);
+            end
+        end
     end
    
     methods (Access=protected)
@@ -141,9 +140,19 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
             callstruct.fully_qualified_name = join(fully_qualified_name_arr, ".");
             callstruct.args    = args(:);
 
-            jlo = obj.mh.feval("matfrostjuliacall", callstruct);
+
+            if obj.USE_MEXHOST
+                jlo = obj.mh.feval("matfrostjuliacall", callstruct);
+            else
+                jlo = matfrostjuliacall(callstruct);
+            end
             
-            varargout{1} = jlo;
+            if jlo.status == "SUCCESFUL"
+                varargout{1} = jlo.value;
+            elseif jlo.status =="ERROR"
+                throw(MException("matfrostjulia:error", jlo.value))
+            end
+
         end
 
         function obj = dotAssign(obj,indexOp,varargin)

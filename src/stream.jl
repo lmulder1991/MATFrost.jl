@@ -11,21 +11,41 @@ const SOCK_STREAM = Cint(1)
 const SOMAXCONN = Cint(0x7fffffff)
 
 const FD_TYPE = UInt64
+const INVALID_SOCKET = UInt64(0)
 
 const SOCKADDR_UN = @NamedTuple{sun_family::UInt16, sun_path::NTuple{256,UInt8}}
 
+function memcpy_mat(pdest::Ptr{UInt8}, psrc::Ptr{UInt8}, nb::Csize_t)
+    @ccall memcpy(pdest::Ptr{UInt8}, psrc::Ptr{UInt8}, nb::Csize_t)::Cvoid
+end
+
+function memcpy_mat(pdest::Ptr{UInt8}, psrc::Ptr{UInt8}, nb::Int64)
+    @ccall memcpy(pdest::Ptr{UInt8}, psrc::Ptr{UInt8}, nb::Int64)::Cvoid
+end
+
 function uds_socket()
-    @ccall "Ws2_32.dll".socket(
+    fd = @ccall "Ws2_32.dll".socket(
         AF_UNIX::Cint, 
         SOCK_STREAM::Cint, 
         Int32(0)::Cint)::FD_TYPE
+
+    if fd != INVALID_SOCKET
+        return fd
+    end
+
+    throw("Cannot start socket")
 end
 
 function uds_init()
     wsadata=Ref{NTuple{408, UInt8}}()
-    @ccall "Ws2_32.dll".WSAStartup(
+    rc = @ccall "Ws2_32.dll".WSAStartup(
         reinterpret(UInt16, (UInt8(2),UInt8(2)))::UInt16, 
         wsadata::Ref{NTuple{408, UInt8}})::Cint
+
+    if rc != 0 
+        throw("WSAStartup failed: $(rc)");
+    end
+
 end
 
 function uds_bind(socket_fd::FD_TYPE, path::String)
@@ -43,10 +63,14 @@ function uds_bind(socket_fd::FD_TYPE, path::String)
     socket_addr = SOCKADDR_UN((UInt16(AF_UNIX), sun_path))
 
     socket_addr_ref = Ref{SOCKADDR_UN}(socket_addr)
-    @ccall "Ws2_32.dll".bind(
+    rc = @ccall "Ws2_32.dll".bind(
         socket_fd::FD_TYPE, 
         socket_addr_ref::Ref{SOCKADDR_UN}, 
         Cint(sizeof(SOCKADDR_UN))::Cint)::Cint
+
+    if rc != 0
+        throw("Cannot bind to socket $(path)")
+    end
 end
 
 function uds_connect(socket_fd::FD_TYPE, path::String)
@@ -70,32 +94,53 @@ function uds_connect(socket_fd::FD_TYPE, path::String)
 end
 
 function uds_listen(socket_fd::FD_TYPE)
-    @ccall "Ws2_32.dll".listen(
+    rc = @ccall "Ws2_32.dll".listen(
         socket_fd::FD_TYPE, 
         SOMAXCONN::Cint)::Cint
+
+    if rc != 0
+        throw("Cannot listen to socket")
+    end
 end
 
 function uds_accept(socket_fd::FD_TYPE)
-    @ccall "Ws2_32.dll".accept(
+    client_fd = @ccall "Ws2_32.dll".accept(
         socket_fd::FD_TYPE,
         C_NULL::Ptr{Cvoid},
         C_NULL::Ptr{Cvoid})::FD_TYPE
+
+    if client_fd != INVALID_SOCKET
+        return client_fd
+    end
+
+    throw("Error at accepting client socket")
 end
 
 function uds_read(socket_fd::FD_TYPE, data::Ptr{UInt8}, nb::Int64)
-    @ccall "Ws2_32.dll".recv(
+    rc = @ccall "Ws2_32.dll".recv(
         socket_fd::FD_TYPE, 
         data::Ptr{UInt8}, 
         Cint(nb)::Cint,
         Cint(0)::Cint)::Cint
+    if rc > 0
+        return rc
+    else
+        error("Server killed")
+    end
 end
 
 function uds_write(socket_fd::FD_TYPE, data::Ptr{UInt8}, nb::Int64)
-    @ccall "Ws2_32.dll".send(
+    sent = @ccall "Ws2_32.dll".send(
         socket_fd::FD_TYPE, 
         data::Ptr{UInt8}, 
         Cint(nb)::Cint,
         Cint(0)::Cint)::Cint
+
+    if sent > 0
+        return sent
+    else
+        error("Server killed")
+    end
 end
 
 function uds_close(socket_fd::FD_TYPE)
@@ -130,7 +175,7 @@ end
 @noinline function write!(socket::BufferedUDS, data::Ptr{UInt8}, nb::Int64)
     out = socket.output
     bw = min(length(out.data) - out.available, nb);
-    Base.memcpy(pointer(out.data) + out.available, data, bw);
+    memcpy_mat(pointer(out.data) + out.available, data, bw);
     out.available += bw
 
     if (bw >= nb) 
@@ -150,7 +195,7 @@ end
     if (bw < nb) 
         out.position  = 0
         out.available = nb - bw
-        Base.memcpy(pointer(out.data), data+bw, out.available);
+        memcpy_mat(pointer(out.data), data+bw, out.available);
     end
     nothing
 end
@@ -186,7 +231,7 @@ end
     while (br < nb)
         if (in.available - in.position > 0) 
             brn = min(in.available - in.position, nb - br)
-            Base.memcpy(data + br, pointer(in.data) + in.position, brn)
+            memcpy_mat(data + br, pointer(in.data) + in.position, brn)
             in.position += brn
             br += brn
         elseif (nb - br >= length(in.data))

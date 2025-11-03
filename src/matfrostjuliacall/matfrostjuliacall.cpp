@@ -20,24 +20,21 @@ using matlab::mex::ArgumentList;
 
 #include <chrono>
 
+#include "server.hpp"
 #include "socket.hpp"
-// #include "server.hpp"
-#include "converttojulia.hpp"
+#include "write.hpp"
 
-#include "converttomatlab.hpp"
+#include "read.hpp"
 
-#include "controller.hpp"
 
 
 #define EXPERIMENT_SIZE 1000000
 
+std::map<uint64_t, std::shared_ptr<MATFrost::MATFrostServer>> matfrost_server{};
+std::map<uint64_t, std::shared_ptr<MATFrost::Socket::BufferedUnixDomainSocket>> matfrost_connections{};
 
 class MexFunction : public matlab::mex::Function {
 private:
-
-
-    // std::map<uint64_t, std::shared_ptr<MATFrost::Controller::MATFrostServerController>> matfrost_server{};
-    std::map<uint64_t, std::shared_ptr<MATFrost::Socket::BufferedUnixDomainSocket>> matfrost_connections{};
 
 
 
@@ -62,104 +59,107 @@ public:
         const uint64_t id = static_cast<const matlab::data::TypedArray<uint64_t>>(input["id"])[0];
         const std::u16string action = static_cast<const matlab::data::StringArray>(input["action"])[0];
 
-        if (action == u"CREATE") {
+        if (action == u"START") {
             const std::string cmdline = static_cast<const matlab::data::StringArray>(input["cmdline"])[0];
-
-            // if (matfrost_server.find(id) == matfrost_server.end()) {
-            //     auto jp = MATFrostServer::spawn(cmdline);
-            //     matfrost_server[id] = MATFrost::Controller::construct_controller(jp);
-            // }
-        } else if (action == u"CONNECT") {
             const std::string socket_path = static_cast<const matlab::data::StringArray>(input["socket"])[0];
+            const uint64_t timeout = static_cast<const matlab::data::TypedArray<uint64_t>>(input["timeout"])[0];
 
-            if (matfrost_connections.find(id) == matfrost_connections.end()) {
-                auto socket = MATFrost::Socket::BufferedUnixDomainSocket::connect_socket(socket_path);
-                matfrost_connections[id] = socket;
+            if (matfrost_server.find(id) != matfrost_server.end() || matfrost_connections.find(id) != matfrost_connections.end()) {
+                throw(matlab::engine::MATLABException("MATFrost server already started"));
             }
-        }
-        else if (action == u"DESTROY") {
+            auto matlab = getEngine();
+            auto server = MATFrost::MATFrostServer::spawn(cmdline);
+            auto socket = MATFrost::Socket::BufferedUnixDomainSocket::connect_socket(socket_path, server, matlab, static_cast<long>(timeout));
+
+            matfrost_server[id] = server;
+            matfrost_connections[id] = socket;
+
+
+        } else if (action == u"STOP") {
             if (matfrost_connections.find(id) != matfrost_connections.end()) {
                 matfrost_connections.erase(id);
+            }
+            if (matfrost_server.find(id) != matfrost_server.end()) {
+                matfrost_server.erase(id);
             }
         }
         else if (action == u"CALL") {
             const matlab::data::StringArray fully_qualified_name = input["fully_qualified_name"];
             const matlab::data::CellArray args = input["args"];
 
+            if ( matfrost_server.find(id) == matfrost_server.end()) {
+                throw(matlab::engine::MATLABException("MATFrost server not started"));
+            }
             if (matfrost_connections.find(id) == matfrost_connections.end()) {
-
-            } else {
-
-                auto socket = matfrost_connections[id];
-
-
-                matlab::data::ArrayFactory factory;
-
-
-                matlab::data::StructArray callmeta = factory.createStructArray({1}, {"fully_qualified_name"});
-                callmeta[0]["fully_qualified_name"] = fully_qualified_name;
-
-                matlab::data::CellArray callstruct = factory.createCellArray({2});
-                callstruct[0] = callmeta;
-                callstruct[1] = args;
-
-                outputs[0] = juliacall(socket, callstruct);
-
-
+                throw(matlab::engine::MATLABException("MATFrost server not connected"));
             }
 
+            auto socket = matfrost_connections[id];
+            auto server = matfrost_server[id];
 
+            matlab::data::ArrayFactory factory;
 
+            matlab::data::StructArray callmeta = factory.createStructArray({1}, {"fully_qualified_name"});
+            callmeta[0]["fully_qualified_name"] = fully_qualified_name;
 
+            matlab::data::CellArray callstruct = factory.createCellArray({2});
+            callstruct[0] = callmeta;
+            callstruct[1] = args;
+
+            MATFrost::Write::valid(callstruct);
+
+            try {
+                outputs[0] = juliacall(socket, server, callstruct);
+            } catch (matlab::engine::MATLABException& e) {
+                // Unrecoverable discconect and stop server
+                matfrost_connections.erase(id);
+                matfrost_server.erase(id);
+                throw matlab::engine::MATLABException(e);
+            }
         }
 
 
     }
 
-    matlab::data::Array juliacall(const std::shared_ptr<MATFrost::Socket::BufferedUnixDomainSocket> socket, const matlab::data::Array callstruct) {
+    matlab::data::Array juliacall(const std::shared_ptr<MATFrost::Socket::BufferedUnixDomainSocket> socket, const std::shared_ptr<MATFrost::MATFrostServer> server, const matlab::data::Array callstruct) {
+
+        auto matlab = getEngine();
+        server->dump_logging(matlab);
+
         matlab::data::ArrayFactory factory;
 
-        MATFrost::ConvertToJulia::write(socket, callstruct);
+        if (!socket->is_connected()) {
+            throw(matlab::engine::MATLABException("MATFrost server disconnected"));
+        }
 
+        MATFrost::Write::write(socket, callstruct);
         socket->flush();
 
-        return MATFrost::ConvertToMATLAB::read(socket);
+        size_t niters = socket->timeout_ms / 100+1;
 
-        // matlab::data::ArrayFactory factory;
-        // std::shared_ptr<matlab::engine::MATLABEngine> matlabPtr = getEngine();
-        // // matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
-        // //           ({ factory.createScalar(("###################################\nStarting\n###################################\n"))}));
-        // //
-        //
-        // if (!matfrost_controller->matfrostserver->callable()) {
-        //     return factory.createScalar(-1);
-        // }
-        //
-        // return MATFrost::Controller::call_sequence(matfrost_controller, callstruct);
-        // matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
-        //           ({ factory.createScalar(("###################################\ncallable\n###################################\n"))}));
-        //
-        // // MATFrost::ConvertToJulia::write(callstruct, jp->outputstream);
-        // // msc->matfrostserver->outputstream.flush();
-        //
-        // matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
-        //   ({ factory.createScalar(("###################################\nwritten\n###################################\n"))}));
-        //
-        // while (!jp->inputstream.available()) {
-        //     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        // }
-        //
-        // matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
-        //   ({ factory.createScalar(("###################################\nreading\n###################################\n"))}));
-        //
-        // return MATFrost::ConvertToMATLAB::read(jp->inputstream);
+        timeval timeout{0, 100000}; // 100ms
 
-  //       matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
-  // ({ factory.createScalar(("###################################\nread\n###################################\n"))}));
+        for (size_t i = 0; i < niters; i++) {
+            if (socket->wait_for_readable(timeout)) {
+                // Data available to read
+                auto jlout = MATFrost::Read::read(socket);
+
+                server->dump_logging(matlab);
+
+                return jlout;
+            } else {
+                server->dump_logging(matlab);
+
+                matlab->feval(u"pause", 0, std::vector<matlab::data::Array>
+                    ({ factory.createScalar(0.0)})); // No-operation added to be able interrupt.
+            }
+        }
+
+        throw(matlab::engine::MATLABException("MATFrost server timeout"));
+
     }
 
 
 
 };
 
-// class

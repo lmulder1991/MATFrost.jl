@@ -8,7 +8,7 @@
 #include <memory>
 
 
-namespace MATFrost::ConvertToMATLAB {
+namespace MATFrost::Read {
 
     matlab::data::Array read(const std::shared_ptr<Socket::BufferedUnixDomainSocket> socket);
 
@@ -51,6 +51,7 @@ namespace MATFrost::ConvertToMATLAB {
         }
         return strarr;
     }
+
     matlab::data::Array read_cell(const std::shared_ptr<Socket::BufferedUnixDomainSocket> socket, matlab::data::ArrayDimensions dims) {
         matlab::data::ArrayFactory factory;
 

@@ -36,7 +36,7 @@ function getMethod(meta::CallMeta)
             Main.eval(:(import $(Symbol(packagename))))
             package = getfield(Main, Symbol(packagename))
         catch _
-            throw("Package $(packagename) could not be imported")
+            throw("Package $(packagename) not found")
         end
     end
 
@@ -49,7 +49,7 @@ function getMethod(meta::CallMeta)
             if isa(f, Function)
                 continue
             else
-                throw(ErrorException("Function $sym not found"))
+                throw(ErrorException("Function $(meta.fully_qualified_name) not found"))
             end
         end
     end
@@ -130,161 +130,17 @@ end
 
 function setup_uds_server(path)
     uds_init()
- 
-    println("WSA setup")
 
     server_socket_fd = uds_socket()
 
-    println("Made socket")
-
-    # path = raw"C:\Users\jbelier\Documents\test_matfrost3.sock"
-    # if isfile(path)
-    #     rm(path)
-    # end
     rc_bind = uds_bind(server_socket_fd, path)
-        
-    println("Binded")
 
     rc_listen = uds_listen(server_socket_fd)
-        
-    println("Listening")
 
     server_socket_fd
 
 end
 
-
-
-function connect()
-    uds_init()
-
-    println("WSA setup")
-
-    socket_fd = uds_socket()
-
-    println("Made socket")
-
-    path = raw"C:\Users\jbelier\Documents\test_matfrost3.sock"
-
-    rc_connect = uds_connect(socket_fd, path)
-
-    while rc_connect == -1
-        println(rc_connect)
-        sleep(1)
-        
-        socket_fd = uds_socket()
-
-        println("Made socket")
-    
-        rc_connect = uds_connect(socket_fd, path)
-    end
-
-
-    # function uds_socket()
-    vsize = Ref{Cint}()
-    optlen = Ref{Cint}(4)
-    @ccall "Ws2_32.dll".getsockopt(
-        socket_fd::FD_TYPE, 
-        Cint(0xffff)::Cint,
-        Cint(0x1001)::Cint,
-        vsize::Ref{Cint},
-        optlen::Ref{Cint})::Cint
-
-    println("Send size: $(vsize[])")    
-    
-    @ccall "Ws2_32.dll".getsockopt(
-        socket_fd::FD_TYPE, 
-        Cint(0xffff)::Cint,
-        Cint(0x1002)::Cint,
-        vsize::Ref{Cint},
-        optlen::Ref{Cint})::Cint
-
-    println("Recieve size: $(vsize[])")
-
-# end
-
-#     int WSAAPI getsockopt(
-#   [in]      SOCKET s,
-#   [in]      int    level,
-#   [in]      int    optname,
-#   [out]     char   *optval,
-#   [in, out] int    *optlen
-# );
-
-    socket = BufferedUDS(
-        socket_fd, 
-        Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0),
-        Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0))
-    
-    callstruct = (
-        (fully_qualified_name="MATFrost._Server.matfrosttest",),
-        (12.0,)
-    )
-    
-    println("Writing")
-    write_matfrostarray!(socket, callstruct)
-    flush!(socket)
-    
-    println("Written")
-    out = read_matfrostarray!(socket)
-
-    println(out)
-
-    uds_close(socket_fd)
-
-end
-
-matfrostserve() = matfrostserve(raw"C:\Users\jbelier\Documents\test_matfrost3.sock")
-
-function matfrostserve(socket_path::String)
-
-    server_socket_fd = setup_uds_server(socket_path)
-    bufin = Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0)
-    bufout = Buffer(Vector{UInt8}(undef, 2 << 15), 0, 0)
-
-    client_socket_fd = uds_accept(server_socket_fd)
-    
-    while true  
-        try 
-            # client_socket_fd = uds_accept(server_socket_fd)
-
-            println("Accepted")
-
-            bufin.position = 0
-            bufin.available = 0
-            bufout.position = 0
-            bufout.available = 0
-
-            bufuds = BufferedUDS(client_socket_fd, bufin, bufout)
-            callsequence(bufuds)
-
-            # uds_close(client_socket_fd)
-
-        catch e
-            
-            open(raw"C:\Users\jlmulder\Documents\matfrosttest\errored.txt", "w") do iof
-                println(iof, e)
-                Base.showerror(iof, e)
-                Base.show_backtrace(iof, Base.catch_backtrace())
-            end
-
-            exit()
-        end
-        
-    end
-
-
-end
-
-
-macro MATFrost.matfrostserve(matfrostin, matfrostout)
-esc(quote
-
-    MATFrost._Server.matfrostserve($matfrostin, $matfrostout)
-
-end)
-
-end
 
 
 

@@ -13,14 +13,6 @@
 #include <strsafe.h>
 
 #include <afunix.h>
-// #define UNIX_PATH_MAX 108
-//
-// typedef struct sockaddr_un
-// {
-//     uint16_t sun_family;     /* AF_UNIX */
-//     char sun_path[UNIX_PATH_MAX];  /* pathname */
-// } SOCKADDR_UN;
-
 
 #include <memory>
 
@@ -47,13 +39,22 @@ namespace MATFrost::Socket {
         const std::string socket_path;
         SOCKET socket_fd = INVALID_SOCKET;
 
+        timeval timeout = {5, 0};
+
+
         Buffer input{};
         Buffer output{};
 
     public:
-        BufferedUnixDomainSocket(const std::string &socket_path, SOCKET socket) : socket_path(socket_path), socket_fd(socket) {
 
-        }
+        const long timeout_ms = 0;
+
+        BufferedUnixDomainSocket(const std::string &socket_path, SOCKET socket, timeval timeout, uint64_t timeout_ms) :
+            socket_path(socket_path),
+            socket_fd(socket),
+            timeout(timeout),
+            timeout_ms(timeout_ms)
+        {  }
 
         ~BufferedUnixDomainSocket() {
             if (socket_fd != INVALID_SOCKET) {
@@ -72,25 +73,13 @@ namespace MATFrost::Socket {
                     input.position += brn;
                     br += brn;
                 } else if (nb - br >= BUFSIZE) {
-                    auto brn = recv(
-                        socket_fd,
-                        reinterpret_cast<char *>(&data[br]),
-                        BUFSIZE,
-                        0);
-                    br += brn;
+                    br += read_from_socket(&data[br], BUFSIZE);;
                 } else {
-                    auto brn = recv(
-                        socket_fd,
-                        reinterpret_cast<char *>(&input.data[0]),
-                        BUFSIZE,
-                        0);
-
                     input.position = 0;
-                    input.available = brn;
+                    input.available = read_from_socket(&input.data[0], BUFSIZE);
                 }
             }
         };
-
 
         void write(const uint8_t *data, const size_t nb) {
             size_t bw = std::min(BUFSIZE - output.available, nb);
@@ -104,11 +93,7 @@ namespace MATFrost::Socket {
             flush();
 
             while (nb - bw >= BUFSIZE) {
-                bw += send(
-                    socket_fd,
-                    reinterpret_cast<const char *>(&data[bw]),
-                    BUFSIZE,
-                    0);
+                bw += write_to_socket(&data[bw], BUFSIZE);
             }
 
             if (bw < nb) {
@@ -120,48 +105,248 @@ namespace MATFrost::Socket {
 
         void flush() {
             while (output.available > output.position) {
-                output.position += send(
-                    socket_fd,
-                    reinterpret_cast<const char *>(&output.data[output.position]),
-                    output.available - output.position,
-                    0);
+                output.position += write_to_socket(&output.data[output.position], output.available - output.position);
             }
             output.position = 0;
             output.available = 0;
         }
 
-        static std::shared_ptr<BufferedUnixDomainSocket> connect_socket(const std::string socket_path) {
+        int write_to_socket(const uint8_t *data, const size_t nb) {
+
+            if (!wait_for_writable(timeout)) {
+                throw matlab::engine::MATLABException("Write socket timeout: " + std::to_string(timeout.tv_sec) + " seconds");
+            }
+
+            int sent = send(socket_fd,
+                reinterpret_cast<const char*>(data),
+                static_cast<int>(nb),
+                0);
+
+            if (sent > 0) {
+                return sent;
+                // Might block here on next iteration if buffer fills
+            } else if (sent == 0) {
+                throw matlab::engine::MATLABException("Connection closed");
+            } else {
+                throw matlab::engine::MATLABException("Socket send error: " +
+                                       std::to_string(WSAGetLastError()));
+            }
+
+        }
+
+        int read_from_socket(uint8_t *data, const int nb) {
+            // Use select to wait for data with timeout
+            if (!wait_for_readable(timeout)) {
+                throw matlab::engine::MATLABException("MATFrost timeout: " + std::to_string(timeout.tv_sec) + " seconds");
+            }
+
+            auto brn = recv(
+                        socket_fd,
+                        reinterpret_cast<char *>(data),
+                        nb,
+                        0);
+
+            if (brn > 0) {
+                return brn;
+            } else if (brn == 0) {
+                throw matlab::engine::MATLABException("Connection closed by peer during read");
+            } else {
+                throw matlab::engine::MATLABException("Socket read error: " + std::to_string(WSAGetLastError()));
+            }
+        }
+
+        bool wait_for_readable(timeval time_out) const {
+            if (socket_fd == INVALID_SOCKET) {
+                throw matlab::engine::MATLABException("Invalid socket");
+            }
+
+            fd_set read_set, error_set;
+            FD_ZERO(&read_set);
+            FD_ZERO(&error_set);
+
+            FD_SET(socket_fd, &read_set);
+            FD_SET(socket_fd, &error_set);
+
+
+            int result = select(0, &read_set, nullptr, &error_set, &time_out);
+
+            if (result == SOCKET_ERROR) {
+                throw matlab::engine::MATLABException("Socket error: " + std::to_string(WSAGetLastError()));
+            }
+
+            if (result == 0) {
+                // Timeout
+                return false;
+            }
+
+            // Check for errors
+            if (FD_ISSET(socket_fd, &error_set)) {
+                throw matlab::engine::MATLABException("Socket error:");
+            }
+
+            // Check if data is available
+            if (FD_ISSET(socket_fd, &read_set)) {
+                // Verify it's not EOF
+                char buf[1];
+                int peek_result = recv(socket_fd, buf, 1, MSG_PEEK);
+                if (peek_result == 0) {
+                    // EOF - connection closed
+                    throw matlab::engine::MATLABException("Socket - EOF connection closed");
+                }
+                return true;
+            }
+            throw matlab::engine::MATLABException("Socket error:");
+        }
+
+        bool wait_for_writable(timeval time_out) const {
+            if (socket_fd == INVALID_SOCKET) {
+                throw matlab::engine::MATLABException("Invalid socket");
+            }
+
+            fd_set write_set, error_set;
+            FD_ZERO(&write_set);
+            FD_ZERO(&error_set);
+
+            FD_SET(socket_fd, &write_set);
+            FD_SET(socket_fd, &error_set);
+
+
+
+            int result = select(0, nullptr, &write_set, &error_set, &time_out);
+
+            if (result == SOCKET_ERROR) {
+                
+                throw matlab::engine::MATLABException("Socket error: " + std::to_string(WSAGetLastError()));
+                // return false;
+            }
+
+            if (result == 0) {
+                // Timeout
+                return false;
+
+            }
+
+            // Check for errors first
+            if (FD_ISSET(socket_fd, &error_set)) {
+                throw matlab::engine::MATLABException("Socket error");
+            }
+
+            // Check if writable
+            if (FD_ISSET(socket_fd, &write_set)) {
+                // Optionally verify connection is still good
+                int error = 0;
+                int error_len = sizeof(error);
+                if (getsockopt(socket_fd, SOL_SOCKET, SO_ERROR,
+                              reinterpret_cast<char*>(&error), &error_len) == SOCKET_ERROR) {
+                    throw matlab::engine::MATLABException("Write socket");
+                }
+                
+                if (error == 0) {
+                    return true;
+                }
+            }
+            throw matlab::engine::MATLABException("Socket error");
+        }
+
+
+        bool is_connected() const {
+            if (socket_fd == INVALID_SOCKET) {
+                return false;
+            }
+
+            fd_set write_set, error_set;
+            FD_ZERO(&write_set);
+            FD_ZERO(&error_set);
+
+            FD_SET(socket_fd, &write_set);
+            FD_SET(socket_fd, &error_set);
+
+            // Zero timeout = immediate return (non-blocking check)
+            timeval timeout = {0, 0};
+
+            int result = select(0, nullptr, &write_set, &error_set, &timeout);
+
+            if (result == SOCKET_ERROR || result == 0) {
+                return false;
+            }
+
+            // Check for errors
+            if (FD_ISSET(socket_fd, &error_set)) {
+                return false;
+            }
+
+            // Check if writable (connected sockets are usually writable)
+            if (FD_ISSET(socket_fd, &write_set)) {
+                // Verify no pending error
+                int error = 0;
+                int error_len = sizeof(error);
+                if (getsockopt(socket_fd, SOL_SOCKET, SO_ERROR,
+                              reinterpret_cast<char*>(&error), &error_len) == SOCKET_ERROR) {
+                    return false;
+                              }
+                return error == 0;
+            }
+
+            return false;
+        }
+
+
+        static std::shared_ptr<BufferedUnixDomainSocket> connect_socket(const std::string socket_path, const std::shared_ptr<MATFrostServer> server, std::shared_ptr<matlab::engine::MATLABEngine> matlab, const long timeout_ms) {
             if (!wsa_initialized) {
                 int rc = WSAStartup(MAKEWORD(2, 2), &wsa_data);
+                if (rc != 0) {
+                    throw(matlab::engine::MATLABException("WSAStartup failed: " + std::to_string(rc)));
+                }
                 wsa_initialized = true;
             }
 
-            SOCKET socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-            if (socket_fd == INVALID_SOCKET) {
-                printf("socket() error: %d\n", WSAGetLastError());
-                throw(matlab::engine::MATLABException("ERROR: create socket: \n"));
-            }
-            // getsockopt(socket_fd, SOL_SOCKET, SO_SNDBUF, (char*)&sndbuf_size, &optlen);
-            // getsockopt(socket_fd, SOL_SOCKET, SO_RCVBUF, (char*)&rcvbuf_size, &optlen);
-
-
-            // write(socket_fd,
-
             SOCKADDR_UN socket_addr = {0};
             socket_addr.sun_family = AF_UNIX;
-            strncpy_s(socket_addr.sun_path, sizeof socket_addr.sun_path, socket_path.c_str(), (socket_path.length()));
+            strncpy_s(socket_addr.sun_path, sizeof socket_addr.sun_path,
+                      socket_path.c_str(), socket_path.length());
 
 
-            int rc = connect(socket_fd, reinterpret_cast<struct sockaddr *>(&socket_addr), sizeof(socket_addr));
 
-            if (rc == SOCKET_ERROR) {
-                // printf("connect() error: %d\n", WSAGetLastError());
-                throw(matlab::engine::MATLABException("ERROR: create connection: \n"));
+            for (int attempt = 0; attempt < 400; attempt++) {
+
+                if (!server->is_alive()) {
+                    server->dump_logging(matlab);
+                    throw(matlab::engine::MATLABException("MATFrost server not running"));
+                }
+
+                SOCKET socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+
+                if (socket_fd == INVALID_SOCKET) {
+                    throw(matlab::engine::MATLABException("Failed to create socket: " +
+                                                         std::to_string(WSAGetLastError())));
+                }
+
+                // Attempt connection
+                int rc = connect(socket_fd, reinterpret_cast<struct sockaddr *>(&socket_addr),
+                                sizeof(socket_addr));
+
+                if (rc == 0) {
+
+                    // Connection succeeded immediately
+                    timeval timeout;
+                    timeout.tv_sec = timeout_ms / 1000;
+                    timeout.tv_usec = (timeout_ms % 1000) * 1000;
+
+                    server->dump_logging(matlab);
+                    return std::make_shared<BufferedUnixDomainSocket>(socket_path, socket_fd, timeout, timeout_ms);
+                }
+                closesocket(socket_fd);
+
+                server->dump_logging(matlab);
+
+                Sleep(100);
             }
-
-            return std::make_shared<BufferedUnixDomainSocket>(socket_path, socket_fd);
+            throw(matlab::engine::MATLABException("Connection timeout after " +
+                                     std::to_string(40) +
+                                     " seconds: " + socket_path));
 
         }
+
     };
 }
 

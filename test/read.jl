@@ -8,7 +8,7 @@ using ..BufferPrimitives
 
 using MATFrost: MATFrost
 using MATFrost._Read: read_matfrostarray!
-using MATFrost._Stream: BufferedStream
+using MATFrost._Stream: BufferedUDS, Buffer
 using MATFrost._Types
 
 
@@ -45,8 +45,10 @@ function deepequal(a, b)
 end
 
 
-stream = BufferedStream(C_NULL, Vector{UInt8}(undef, 2 << 16), 0, 0)
+# stream = BufferedUDS(C_NULL, Buffer(Vector{UInt8}(undef, 2 << 16), 0, 0), Buffer(Vector{UInt8}(undef, 2 << 16), 0, 0))
 
+buffer = Buffer(Vector{UInt8}(undef, 2 << 16), 0, 0)
+stream = BufferedUDS(C_NULL, buffer, buffer)
 
 primitive_tests = (
     (Float32, Float32(4321)),
@@ -65,13 +67,13 @@ primitive_tests = (
 )
 
 function test_matfrostarray_read(v_write, v_exp)
-    _clearbuffer!(stream)
-    _writebuffermatfrostarray!(stream, v_write)
-    stream.available += 20
+    _clearbuffer!(buffer)
+    _writebuffermatfrostarray!(buffer, v_write)
+    buffer.available += 20
 
     v_act = read_matfrostarray!(stream)
 
-    t_nb_read = stream.available - stream.position == 20
+    t_nb_read = buffer.available - buffer.position == 20
     t_v_correct = deepequal(v_act, v_exp)
     return t_nb_read && t_v_correct
 end

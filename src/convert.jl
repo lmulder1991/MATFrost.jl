@@ -62,6 +62,22 @@ function convert_matfrostarray(::Type{Array{String,N}}, @nospecialize(marr::MATF
     end
 end
 
+
+"""
+Convert to 0-size Tuples
+"""
+function convert_matfrostarray(::Type{Tuple{}}, @nospecialize(marr::MATFrostArrayAbstract))::Tuple{}
+    if marr isa MATFrostArrayCell
+        validate_array_dimensions(Tuple{}, marr)
+        return ()
+    elseif marr isa MATFrostArrayEmpty
+        return ()
+    else
+        throw(incompatible_datatypes_exception(Tuple{}, marr))
+    end
+
+end
+
 """
 Convert to Tuples
 """
