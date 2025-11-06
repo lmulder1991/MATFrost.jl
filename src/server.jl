@@ -56,14 +56,7 @@ function getMethod(meta::CallMeta)
 
     if length(methods(f)) !== 1 
         if signature === nothing
-            error_msg = """
-            Ambiguous function call: The function $(f) has multiple methods.
-            Please specify the desired method signature.
-            
-            Available methods:
-            $(methods(f))
-            """
-            throw(ErrorException(error_msg))
+            throw(ambiguous_method_error(f))
         else
             pattern = Regex("^$(function_symbols[end])\\($signature\\)")
             index = findfirst(m -> match(pattern, string(m)) !== nothing, methods(f))
@@ -141,6 +134,24 @@ function setup_uds_server(path)
 
 end
 
+function ambiguous_method_error(f)
+    mtd = methods(f)
+    numbered = [
+        "[$i] $(strip(split(string(sig), '@')[1]))"
+        for (i, sig) in enumerate(mtd)
+    ]
+    example = split(numbered[1], "] ")[2]
+    return ErrorException("""
+Ambiguous function call: The function $(f) has multiple methods.
+Please specify the desired method signature to disambiguate your call.
+
+Available methods:
+$(join(numbered, "\n"))
+
+Example usage:
+CallMeta("$(example)")
+""")
+end
 
 
 
