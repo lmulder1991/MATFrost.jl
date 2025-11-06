@@ -23,9 +23,25 @@ end
     callMeta = MATFrost._Server.CallMeta("MATFrost._Convert.convert_matfrostarray")
     @test_throws MATFrost._Server.AmbiguityError MATFrost._Server.getMethod(callMeta)
 
-
     # Test: lower level function with many methods, specific signature
     callMeta = MATFrost._Server.CallMeta("MATFrost._Convert.convert_matfrostarray","(::Type{String}, marr::MATFrost._Types.MATFrostArrayAbstract)")
     f = MATFrost._Server.getMethod(callMeta)
     @test isa(f, Method)
+
+    # Test: non-existing function should throw error
+    callMeta = MATFrost._Server.CallMeta("MATFrost.nonExistentFunction")
+    @test_throws ErrorException MATFrost._Server.getMethod(callMeta)
+        try
+        MATFrost._Server.getMethod(callMeta)
+    catch e
+        @test occursin("Function MATFrost.nonExistentFunction not found", e.msg)
+    end
+
+    # Test: non-existing package should throw error
+    callMeta = MATFrost._Server.CallMeta("NonExistentPackage.nonExistentFunction")
+    try
+        MATFrost._Server.getMethod(callMeta)
+    catch e
+        @test occursin("Package NonExistentPackage not found", e.msg)
+    end
 end

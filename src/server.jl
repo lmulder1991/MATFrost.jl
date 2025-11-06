@@ -44,7 +44,7 @@ function getMethod(meta::CallMeta)
             Main.eval(:(import $(Symbol(packagename))))
             package = getfield(Main, Symbol(packagename))
         catch _
-            throw("Package $(packagename) not found")
+            throw(ErrorException("Package $(packagename) not found"))
         end
     end
 
@@ -70,7 +70,7 @@ function getMethod(meta::CallMeta)
             index = findfirst(m -> match(pattern, string(m)) !== nothing, methods(f))
             if index === nothing
                 error_msg = """
-                No matching method found for function $(f) with signature $(metasignature).
+                No matching method found for function $(f) with signature $(meta.signature).
                 
                 Available methods:
                 $(methods(f))
