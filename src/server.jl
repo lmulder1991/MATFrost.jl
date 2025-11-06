@@ -11,22 +11,30 @@ using ..MATFrost._Convert: convert_matfrostarray
 
 struct CallMeta
     fully_qualified_name::String
+    signature::Union{Nothing, String}
 end
-
+CallMeta(fully_qualified_name::String) = CallMeta(fully_qualified_name, nothing)
 struct MATFrostResultMATLAB{T}
     status::String # ERROR/SUCCESFUL
     log::String
     value::T
 end
 
+struct AmbiguityError <: Exception
+    msg::String
+end
+AmbiguityError(f::Function) = AmbiguityError(ambiguous_method_error(f))
+
+Base.showerror(io::IO, e::AmbiguityError) = print(io, e.msg)
+
 matfrosttest(x::Float64)=23*x
 
 function getMethod(meta::CallMeta)
-    m = match(r"^([^.]+)\.([^(]+)(\(.*\))?$", meta.fully_qualified_name)
+    m = match(r"^([^.]+)\.([^(]+)$", meta.fully_qualified_name)
     if m === nothing
         throw("Incompatible fully_qualified_name")
     end
-    (packagename, function_name, signature) = m.captures
+    (packagename, function_name) = m.captures
     package = nothing
 
     try
@@ -55,14 +63,14 @@ function getMethod(meta::CallMeta)
     end
 
     if length(methods(f)) !== 1 
-        if signature === nothing
-            throw(ambiguous_method_error(f))
+        if meta.signature === nothing
+            throw(AmbiguityError(f))
         else
-            pattern = Regex("^$(function_symbols[end])\\($signature\\)")
+            pattern = Regex("^$(function_symbols[end])\\($(meta.signature)\\)")
             index = findfirst(m -> match(pattern, string(m)) !== nothing, methods(f))
             if index === nothing
                 error_msg = """
-                No matching method found for function $(f) with signature $(signature).
+                No matching method found for function $(f) with signature $(metasignature).
                 
                 Available methods:
                 $(methods(f))
@@ -141,22 +149,25 @@ function ambiguous_method_error(f)
         for (i, sig) in enumerate(mtd)
     ]
     example = split(numbered[1], "] ")[2]
-    return ErrorException("""
-Ambiguous function call: The function $(f) has multiple methods.
-Please specify the desired method signature to disambiguate your call.
+    m = match(r"^([^(]+)(\(.*\))$", example)
+    if m !== nothing
+        name = m.captures[1]
+        args = m.captures[2]
+        example_name = strip(name)
+        example_args = strip(args,['(', ')'])
+    else
+        example_name = example
+        example_args = ""
+    end
+    return """
+        Ambiguous function call: The function $(f) has multiple methods.
+        Please specify the desired method signature to disambiguate your call.
 
-Available methods:
-$(join(numbered, "\n"))
+        Available methods:
+        $(join(numbered, "\n"))
 
-Example usage:
-CallMeta("$(example)")
-""")
-end
-
-
-
-
-
-
-
+        Example usage:
+        CallMeta(\"$(example_name)\", \"$(example_args)\")
+        """
+    end
 end
