@@ -12,14 +12,19 @@ using ..MATFrost._ConvertToMATLAB: _ConvertToMATLAB
 
 struct CallMeta
     fully_qualified_name::String
+    signature::Union{Nothing,String}
 end
-
+CallMeta(fully_qualified_name::String) = CallMeta(fully_qualified_name, nothing)
 struct MATFrostResultMATLAB{T}
     status::String # ERROR/SUCCESFUL
     log::String
     value::T
 end
 
+struct AmbiguityError <: Exception
+    msg::String
+end
+AmbiguityError(f::Function) = AmbiguityError(ambiguous_method_error(f))
 """
 This function is the basis of the MATFrostServer.
 """
@@ -118,7 +123,7 @@ end
 
 function callsequence_latest_world_age(callmeta, callargs)
     
-    f = getfunction(callmeta)
+    f = getMethod(callmeta)
     
     Args = Tuple{methods(f)[1].sig.types[2:end]...}
 
@@ -139,50 +144,58 @@ function callsequence_latest_world_age(callmeta, callargs)
 end
 
 
-function getfunction(meta::CallMeta)
-    syms = Symbol.(split(meta.fully_qualified_name,"."))
-
-    if length(syms) < 2
-        throw(MATFrostException("matfrostjulia:call:callMeta", """
-Invalid function call exception:
-
-Minimum need at least a package and a function.
-
-Function: $(meta.fully_qualified_name)
-"""
-))
+function getMethod(meta::CallMeta)
+    m = match(r"^([^.]+)\.([^(]+)$", meta.fully_qualified_name)
+    if m === nothing
+        throw("Incompatible fully_qualified_name")
     end
-    
-    packagename = syms[1]
-    package = getfield(Main, packagename)
+    (packagename, function_name) = m.captures
+    package = nothing
 
-    f = package
-    for i in 2:lastindex(syms)
+    try
+        package = getfield(Main, Symbol(packagename))
+    catch _
         try
-            f = getfield(f, syms[i])
+            Main.eval(:(import $(Symbol(packagename))))
+            package = getfield(Main, Symbol(packagename))
         catch _
-            throw(MATFrostException("matfrostjulia:call:functionNotFound", 
-"""
-Function not found exception:
-
-Function: $(meta.fully_qualified_name)
-"""
-))
+            throw(ErrorException("Package $(packagename) not found"))
         end
     end
 
-    if length(methods(f)) != 1
-        throw(MATFrostException("matfrostjulia:call:multipleMethodDefinitions", 
-"""
-Multiple method definitions exception:
+    f = package
+    function_symbols = Symbol.(split(function_name, "."))
+    for sym in function_symbols
+        try
+            f = getfield(f, sym)
+        catch _
+            if isa(f, Function)
+                continue
+            else
+                throw(ErrorException("Function $(meta.fully_qualified_name) not found"))
+            end
+        end
+    end
 
-MATFrost determines the interface based on the call signature of a methods. Currently it is only supported to have one method per function.
-
-For function: $(meta.fully_qualified_name)
-    Actual number of methods:   $(length(methods(f)))
-    Expected number of methods: 1
-"""
-))
+    if length(methods(f)) !== 1
+        if meta.signature === nothing
+            throw(AmbiguityError(f))
+        else
+            pattern = Regex("^$(function_symbols[end])\\($(meta.signature)\\)")
+            index = findfirst(m -> match(pattern, string(m)) !== nothing, methods(f))
+            if index === nothing
+                error_msg = """
+                No matching method found for function $(f) with signature $(meta.signature).
+                
+                Available methods:
+                $(methods(f))
+                """
+                throw(ErrorException(error_msg))
+            end
+        end
+        f = methods(f)[index]
+    else
+        f = methods(f)[1]
     end
 
     return f
@@ -235,11 +248,33 @@ function setup_uds_server(path)
 
 end
 
+function ambiguous_method_error(f)
+    mtd = methods(f)
+    numbered = [
+        "[$i] $(strip(split(string(sig), '@')[1]))"
+        for (i, sig) in enumerate(mtd)
+    ]
+    example = split(numbered[1], "] ")[2]
+    m = match(r"^([^(]+)(\(.*\))$", example)
+    if m !== nothing
+        name = m.captures[1]
+        args = m.captures[2]
+        example_name = strip(name)
+        example_args = strip(args, ['(', ')'])
+    else
+        example_name = example
+        example_args = ""
+    end
+    return """
+        Ambiguous function call: The function $(f) has multiple methods.
+        Please specify the desired method signature to disambiguate your call.
 
+        Available methods:
+        $(join(numbered, "\n"))
 
-
-
-
-
+        Example usage:
+        CallMeta(\"$(example_name)\", \"$(example_args)\")
+        """
+end
 
 end
