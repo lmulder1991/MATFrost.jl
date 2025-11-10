@@ -21,10 +21,8 @@ struct MATFrostResultMATLAB{T}
     value::T
 end
 
-struct AmbiguityError <: Exception
-    msg::String
-end
-AmbiguityError(f::Function) = AmbiguityError(ambiguous_method_error(f))
+
+AmbiguityError(f::Function) = MATFrostException("matfrostjulia:call:ambigiousFunction",ambiguous_method_error(f))
 """
 This function is the basis of the MATFrostServer.
 """
@@ -179,7 +177,9 @@ function getMethod(meta::CallMeta)
 
     if length(methods(f)) !== 1
         if meta.signature === nothing
-            throw(AmbiguityError(f))
+            throw(MATFrostException("matfrostjulia:call:packageNotFound", 
+                ambiguous_method_error(f)
+            ))
         else
             pattern = Regex("^$(function_symbols[end])\\($(meta.signature)\\)")
             index = findfirst(m -> match(pattern, string(m)) !== nothing, methods(f))
