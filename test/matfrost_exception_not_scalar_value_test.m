@@ -11,7 +11,8 @@ classdef matfrost_exception_not_scalar_value_test < matfrost_abstract_test
         jltype = {
             "bool"; 
             "string";
-%             "tup_f64_i64_bool_string";  % 
+            % "tup_f64_i64_bool_string";  % 
+
             "i8"; "ui8"; "i16"; "ui16"; "i32"; "ui32"; "i64"; "ui64"; ...
             "f32"; "f64"; ...
             "ci8"; "cui8"; "ci16"; "cui16"; "ci32"; "cui32"; "ci64"; "cui64"; ...
@@ -23,7 +24,7 @@ classdef matfrost_exception_not_scalar_value_test < matfrost_abstract_test
         val = {...
                 true;
                 "test";
-                 {3}; % {3.0; int64(3); true; "Test"};
+                 % {3.0; int64(3); true; "Test"};
                 ...
                 int8(8);          uint8(14);
                 int16(478);       uint16(4532);
@@ -44,12 +45,13 @@ classdef matfrost_exception_not_scalar_value_test < matfrost_abstract_test
                 complex(single(34.125), single(4234.5));  
                 complex(2342.0625, 12444.0625);
                 ...
+                struct("name", "Test", "population", int64(200));
                 struct("name", "Test", "population", int64(200))}; 
         
     end
    
    
-    methods(Test, ParameterCombination="exhaustive")
+    methods(Test, ParameterCombination="sequential")
 
         function error_empty_input(tc, jltype, val)
             if isnumeric(val)

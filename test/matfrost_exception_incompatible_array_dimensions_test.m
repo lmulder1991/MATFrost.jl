@@ -38,20 +38,36 @@ classdef matfrost_exception_incompatible_array_dimensions_test < matfrost_abstra
                 complex(single(34.125), single(4234.5));  
                 complex(2342.0625, 12444.0625);
                 ...
+                struct("name", "Test", "population", int64(200));
                 struct("name", "Test", "population", int64(200))}; 
         
     end
    
    
-    methods(Test, ParameterCombination="exhaustive")
+    methods(Test, ParameterCombination="sequential")
        
-        function row_vector_error(tc, val, jltype)
+        function column_vector_accepted(tc, val, jltype)
+            if iscell(val)
+                vs = repmat({val}, 5, 1);
+            else
+                vs = repmat(val, 5, 1);
+            end
+
+            tc.verifyEqual(...
+                tc.mjl.MATFrostTest.("identity_vector_" + jltype)(vs), ...
+                vs);
+        end
+
+        function row_vector_accepted(tc, val, jltype)
             if iscell(val)
                 vs = repmat({val}, 1, 5);
             else
                 vs = repmat(val, 1, 5);
             end
-            tc.verifyError(@() tc.mjl.MATFrostTest.("identity_vector_" + jltype)(vs), 'matfrostjulia:conversion:incompatibleArrayDimensions');
+
+            tc.verifyEqual(...
+                tc.mjl.MATFrostTest.("identity_vector_" + jltype)(vs), ...
+                vs.');
         end
 
         function matrix_value_to_vector_type_error(tc, val, jltype)

@@ -1,8 +1,14 @@
+
+
+#include <cstdint>
+#include <winsock2.h>
+
 #include "mex.hpp"
 #include "mexAdapter.hpp"
 
 #include <tuple>
 // stdc++ lib
+#include <map>
 #include <string>
 
 // External dependencies
@@ -15,166 +21,141 @@ using matlab::mex::ArgumentList;
 #include <complex>
 
 #include <chrono>
-#include "converttojulia.hpp"
-#include "converttomatlab.hpp"
 
-extern "C" {
-    #include "matfrost.h"
-}
+#include "server.hpp"
+#include "socket.hpp"
+#include "write.hpp"
+
+#include "read.hpp"
 
 
+
+#define EXPERIMENT_SIZE 1000000
+
+std::map<uint64_t, std::shared_ptr<MATFrost::MATFrostServer>> matfrost_server{};
+std::map<uint64_t, std::shared_ptr<MATFrost::Socket::BufferedUnixDomainSocket>> matfrost_connections{};
 
 class MexFunction : public matlab::mex::Function {
 private:
-    std::shared_ptr<matlab::engine::MATLABEngine> matlabPtr;
-    ArgumentList* outputs_p;
-    ArgumentList* inputs_p;
-    std::thread juliaworkerthread;
-    
-    std::mutex mtx_mex;
 
-    std::mutex mtx_jl;
-    std::condition_variable cv_jl;
-
-    
-    bool                          exception_triggered = false;
-    matlab::engine::MATLABException exception_matlab;
-
-    MATFrostArray (*juliacall)(MATFrostArray) = nullptr;
-    void (*freematfrostmemory)(MATFrostArray) = nullptr;
-    // std::string julia_environment_path;
 
 
 public:
     MexFunction() {
-        matlabPtr = getEngine(); 
 
-        std::unique_lock<std::mutex> lk(mtx_jl);
-
-        // Start Julia worker and initialize Julia.
-        juliaworkerthread = std::thread(&MexFunction::juliaworker, this);
-        
-        // wait for Julia init to finish.
-        cv_jl.wait(lk);
 
     }
 
-    virtual ~MexFunction(){
-        
-        matlab::data::ArrayFactory factory;
+    ~MexFunction() override {
 
-        matlabPtr->feval(u"fprintf", 0, std::vector<matlab::data::Array>
-            ({ factory.createScalar("Closing MEX function")}));
     }
 
     void operator()(ArgumentList outputs, ArgumentList inputs) {
-        
-        // lk_mex will sequentialize Julia jobs in case of concurrent MEX-calls.
-        std::lock_guard<std::mutex> lk_mex(mtx_mex);
-        {
-            std::unique_lock<std::mutex> lk(mtx_jl);
-            inputs_p = &inputs;
-            outputs_p = &outputs;
+        // matlab::data::ArrayFactory factory;
+        // std::shared_ptr<matlab::engine::MATLABEngine> matlabPtr = getEngine();
+        // matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
+        //           ({ factory.createScalar(("###################################\nStarting\n###################################\n"))}));
 
-            // Start Julia worker Job
-            cv_jl.notify_one();
-            cv_jl.wait(lk);
+        const matlab::data::Struct input = static_cast<const matlab::data::StructArray>(inputs[0])[0];
+
+        const uint64_t id = static_cast<const matlab::data::TypedArray<uint64_t>>(input["id"])[0];
+        const std::u16string action = static_cast<const matlab::data::StringArray>(input["action"])[0];
+
+        if (action == u"START") {
+            const std::string cmdline = static_cast<const matlab::data::StringArray>(input["cmdline"])[0];
+            const std::string socket_path = static_cast<const matlab::data::StringArray>(input["socket"])[0];
+            const uint64_t timeout = static_cast<const matlab::data::TypedArray<uint64_t>>(input["timeout"])[0];
+
+            if (matfrost_server.find(id) != matfrost_server.end() || matfrost_connections.find(id) != matfrost_connections.end()) {
+                throw(matlab::engine::MATLABException("MATFrost server already started"));
+            }
+            auto matlab = getEngine();
+            auto server = MATFrost::MATFrostServer::spawn(cmdline);
+            auto socket = MATFrost::Socket::BufferedUnixDomainSocket::connect_socket(socket_path, server, matlab, static_cast<long>(timeout));
+
+            matfrost_server[id] = server;
+            matfrost_connections[id] = socket;
 
 
-            if (exception_triggered){ 
-                exception_triggered = false;
-                throw exception_matlab;
-            } 
+        } else if (action == u"STOP") {
+            if (matfrost_connections.find(id) != matfrost_connections.end()) {
+                matfrost_connections.erase(id);
+            }
+            if (matfrost_server.find(id) != matfrost_server.end()) {
+                matfrost_server.erase(id);
+            }
         }
-        
-    }
+        else if (action == u"CALL") {
 
-    int juliaworker(){
-        std::unique_lock<std::mutex> lk(mtx_jl);
-        jl_init();
+            matlab::data::CellArray callstruct = input["callstruct"];
 
-        void* matf                 = jl_eval_string("using MATFrost: MATFrost");
-        void* juliacall_c          = jl_eval_string("MATFrost.MEX.juliacall_c()");
-        void* freematfrostmemory_c = jl_eval_string("MATFrost.MEX.freematfrostmemory_c()");
-
-        if (matf != nullptr && juliacall_c != nullptr && freematfrostmemory_c != nullptr) {
-            juliacall          = (MATFrostArray (*)(MATFrostArray))  jl_unbox_voidpointer(juliacall_c);
-            freematfrostmemory = (void (*)(MATFrostArray))           jl_unbox_voidpointer(freematfrostmemory_c);
-        }
-
-        while(true){
-            cv_jl.notify_one();
-            cv_jl.wait(lk);
-
-            juliaworkerjob();
-        }
-        
-        return 0;
-    }
-
-
-    int juliaworkerjob() {
-        if (juliacall == nullptr || freematfrostmemory == nullptr) {
-            exception_triggered = true;
-            exception_matlab = matlab::engine::MATLABException(
-                "matfrostjulia:MATFrostPackageMissingInEnvironment",
-                u"Configurd Julia environment cannot load required MATFrost package. Either Julia environment is missing MATFrost dependency or environment has not been properly instantiated.");
-            return 0;
-        }
-        try
-        {
-            ArgumentList& outputs = *outputs_p;
-            ArgumentList& inputs = *inputs_p;
-            matlab::data::ArrayFactory factory;
-
-            const matlab::data::StructArray sarr = inputs[0];
-            const matlab::data::StringArray parr  = sarr[0]["package"];
-            std::string pack = matlab::engine::convertUTF16StringToUTF8String(parr[0]);
-            jl_eval_string(("import " + pack).c_str());
-
-            // During testing it occurred that function pointers became dangling. This issue occurred on Julia 1.8.
-            // Likely this is happening due to package import statement one line above. For safety we retrieve the
-            // pointer for every call.
-            juliacall          = (MATFrostArray (*)(MATFrostArray)) jl_unbox_voidpointer(jl_eval_string("MATFrost.MEX.juliacall_c()"));
-            freematfrostmemory = (void (*)(MATFrostArray))          jl_unbox_voidpointer(jl_eval_string("MATFrost.MEX.freematfrostmemory_c()"));
-
-            auto mfa = MATFrost::ConvertToJulia::convert(inputs[0]);
-
-            MATFrostArray   jlo = juliacall(mfa->matfrostarray);
-
-            const matlab::data::StructArray mato = MATFrost::ConvertToMATLAB::convert(jlo);
-
-            freematfrostmemory(jlo);
-
-            const matlab::data::TypedArray<bool> exception_b = mato[0]["exception"];
-            if (exception_b[0]) {
-                const matlab::data::StructArray matso = mato[0]["value"];
-                const matlab::data::StringArray exception_id = matso[0]["id"];
-                const matlab::data::StringArray exception_message = matso[0]["message"];
-                throw matlab::engine::MATLABException(exception_id[0], exception_message[0]);
+            if ( matfrost_server.find(id) == matfrost_server.end()) {
+                throw(matlab::engine::MATLABException("MATFrost server not started"));
+            }
+            if (matfrost_connections.find(id) == matfrost_connections.end()) {
+                throw(matlab::engine::MATLABException("MATFrost server not connected"));
             }
 
-            outputs[0] = mato[0]["value"];
+            auto socket = matfrost_connections[id];
+            auto server = matfrost_server[id];
 
-        }
-        catch(const matlab::engine::MATLABException& ex)
-        {
-            exception_matlab = ex;
-            exception_triggered = true;
-        }
-        catch(std::exception& ex)
-        {
             matlab::data::ArrayFactory factory;
-            matlabPtr->feval(u"disp", 0, std::vector<matlab::data::Array>
-                ({ factory.createScalar("###################################\nMATFrost error: " + std::string(ex.what()) + "\n###################################\n")}));
+
+
+            MATFrost::Write::valid(callstruct);
+
+            try {
+                outputs[0] = juliacall(socket, server, callstruct);
+            } catch (matlab::engine::MATLABException& e) {
+                // Unrecoverable discconect and stop server
+                matfrost_connections.erase(id);
+                matfrost_server.erase(id);
+                throw matlab::engine::MATLABException(e);
+            }
         }
-        return 0; 
+
+
     }
 
+    matlab::data::Array juliacall(const std::shared_ptr<MATFrost::Socket::BufferedUnixDomainSocket> socket, const std::shared_ptr<MATFrost::MATFrostServer> server, const matlab::data::Array callstruct) {
 
-    
+        auto matlab = getEngine();
+        server->dump_logging(matlab);
+
+        matlab::data::ArrayFactory factory;
+
+        if (!socket->is_connected()) {
+            throw(matlab::engine::MATLABException("MATFrost server disconnected"));
+        }
+
+        MATFrost::Write::write(socket, callstruct);
+        socket->flush();
+
+        size_t niters = socket->timeout_ms / 100+1;
+
+        timeval timeout{0, 100000}; // 100ms
+
+        for (size_t i = 0; i < niters; i++) {
+            if (socket->wait_for_readable(timeout)) {
+                // Data available to read
+                auto jlout = MATFrost::Read::read(socket);
+
+                server->dump_logging(matlab);
+
+                return jlout;
+            } else {
+                server->dump_logging(matlab);
+
+                matlab->feval(u"pause", 0, std::vector<matlab::data::Array>
+                    ({ factory.createScalar(0.0)})); // No-operation added to be able interrupt.
+            }
+        }
+
+        throw(matlab::engine::MATLABException("MATFrost server timeout"));
+
+    }
+
 
 
 };
 
-// class

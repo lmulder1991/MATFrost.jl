@@ -23,7 +23,7 @@ classdef matfrost_exception_incompatible_datatypes_test < matfrost_abstract_test
         vs = {...
                 true;
                 "test";
-                 {3}; % {3.0; int64(3); true; "Test"};
+                 {3.0; int64(3); true; "Test"};
                 ...
                 int8(8);          uint8(14);
                 int16(478);       uint16(4532);
@@ -91,21 +91,6 @@ classdef matfrost_exception_incompatible_datatypes_test < matfrost_abstract_test
         function scalar_val_scalar_jltype_incompatible_datatypes(tc, val, jltype)
             tc.verifyError(@() tc.mjl.MATFrostTest.("identity_" + jltype)(val), 'matfrostjulia:conversion:incompatibleDatatypes');
         end
-%         
-%         function vector_val_scalar_jltype_incompatible_datatypes(tc, val, jltype)
-%             if iscell(val)
-%                 vals = repmat({val}, 5, 1);
-%             else
-%                 vals = repmat(val, 5, 1);
-%             end
-%             tc.verifyError(@() tc.mjl.MATFrostTest.("identity_" + jltype)(vals), 'matfrostjulia:conversion:notScalarValue');
-%         end
-
-
-% 
-%         function scalar_val_vector_jltype_incompatible_datatypes(tc, val, jltype)
-%             tc.verifyError(@() tc.mjl.MATFrostTest.("identity_vector_" + jltype)(val), 'matfrostjulia:conversion:incompatibleArrayDimensions');
-%         end
 
         function vector_val_vector_jltype_incompatible_datatypes(tc, val, jltype)
             if iscell(val)
@@ -115,14 +100,6 @@ classdef matfrost_exception_incompatible_datatypes_test < matfrost_abstract_test
             end
             tc.verifyError(@() tc.mjl.MATFrostTest.("identity_vector_" + jltype)(vals), 'matfrostjulia:conversion:incompatibleDatatypes');
         end
-
-% 
-%         
-% 
-%         function scalar_val_matrix_jltype_incompatible_datatypes(tc, val, jltype)
-%             tc.verifyError(@() tc.mjl.MATFrostTest.("identity_matrix_" + jltype)(val), 'matfrostjulia:conversion:incompatibleArrayDimensions');
-%         end
-
 
         function matrix_val_matrix_jltype_incompatible_datatypes(tc, val, jltype)
             if iscell(val)

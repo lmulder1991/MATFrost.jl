@@ -1,26 +1,30 @@
 module MATFrost
+
 using Artifacts
 using TOML
 
-struct _MATFrostArray
-    type::Cint
-    ndims::Csize_t
-    dims::Ptr{Csize_t}
-    data::Ptr{Cvoid}
-    nfields::Csize_t
-    fieldnames::Ptr{Cstring}
-end
 
-struct _MATFrostException <: Exception 
-    id::String
-    message::String
-end
+function _read! end
+function _write! end
 
+function matfrostserve end
+
+
+
+include("types.jl")
+include("constants.jl")
+
+include("stream.jl")
+
+include("read.jl")
 include("converttojulia.jl")
 include("converttomatlab.jl")
-include("juliacall.jl")
-include("install.jl")
-include("mex.jl")
+include("write.jl")
 
+include("server.jl")
+
+include("example.jl")
+
+include("install.jl")
 
 end
