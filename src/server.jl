@@ -12,9 +12,9 @@ using ..MATFrost._ConvertToMATLAB: _ConvertToMATLAB
 
 struct CallMeta
     fully_qualified_name::String
-    signature::Union{Nothing,String}
+    signature::String 
 end
-CallMeta(fully_qualified_name::String) = CallMeta(fully_qualified_name, nothing)
+CallMeta(fully_qualified_name::String) = CallMeta(fully_qualified_name, "")
 struct MATFrostResultMATLAB{T}
     status::String # ERROR/SUCCESFUL
     log::String
@@ -120,12 +120,10 @@ Package: $(packagename)
 end
 
 function callsequence_latest_world_age(callmeta, callargs)
-    
-    f = getMethod(callmeta)
-    
-    Args = Tuple{methods(f)[1].sig.types[2:end]...}
+    (f,method) = getMethod(callmeta)
+    Args = Tuple{method.sig.types[2:end]...}
 
-    args=try
+    args = try
         _ConvertToJulia.convert_matfrostarray(Args, callargs)
     catch e
         if e isa MATFrostConversionException
@@ -134,11 +132,10 @@ function callsequence_latest_world_age(callmeta, callargs)
         rethrow(e)
     end
 
-    # The function call!
+    # Call the function using invokelatest for world age safety
     out = f(args...)
 
     _ConvertToMATLAB.convert_matfrostarray(MATFrostResultMATLAB("SUCCESFUL", "", out))
-    
 end
 
 
@@ -176,7 +173,7 @@ function getMethod(meta::CallMeta)
     end
 
     if length(methods(f)) !== 1
-        if meta.signature === nothing
+        if isempty(meta.signature)
             throw(MATFrostException("matfrostjulia:call:packageNotFound", 
                 ambiguous_method_error(f)
             ))
@@ -193,12 +190,12 @@ function getMethod(meta::CallMeta)
                 throw(ErrorException(error_msg))
             end
         end
-        f = methods(f)[index]
+        method = methods(f)[index]
     else
-        f = methods(f)[1]
+        method = methods(f)[1]
     end
 
-    return f
+    return (f,method)
 
 end
 

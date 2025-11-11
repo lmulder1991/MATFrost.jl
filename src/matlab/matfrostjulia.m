@@ -118,16 +118,13 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
             end
 
             fully_qualified_name_arr = arrayfun(@(in) string(in.Name), indexOp(1:end-1));
-             
-            args = indexOp(end).Indices;
-
+            [arguments,signature] = parseArguments(indexOp(end).Indices{:});
+            % This is the object being sent to MATLAB 
             callstruct.id = obj.id;
             callstruct.action = "CALL";
-
             callmeta.fully_qualified_name = join(fully_qualified_name_arr, ".");
-
-            % This is the object being sent to MATLAB 
-            callstruct.callstruct = {callmeta; args(:)};
+            callmeta.signature = signature;
+            callstruct.callstruct = {callmeta; arguments(:)};
 
             if obj.USE_MEXHOST
                 jlo = obj.mh.feval("matfrostjuliacall", callstruct);
@@ -147,6 +144,16 @@ classdef matfrostjulia < handle & matlab.mixin.indexing.RedefinesDot
                 end
             end
 
+            function [arguments,signature] = parseArguments(varargin)
+                % Default values
+                signature = "";
+                if nargin>1 && isstring(varargin{1})
+                    signature = varargin{1};
+                    arguments = varargin{2:end};
+                else
+                    arguments = varargin{:};
+                end
+            end
         end
 
         function obj = dotAssign(obj,indexOp,varargin)
