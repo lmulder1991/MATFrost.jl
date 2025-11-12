@@ -143,20 +143,8 @@ function getMethod(meta::CallMeta)
         throw("Incompatible fully_qualified_name")
     end
     (packagename, function_name) = m.captures
-    package = nothing
 
-    try
-        if package_is_loaded(Symbol(packagename))
-            package = getfield(Main, Symbol(packagename))
-        else
-            Main.eval(:(import $(Symbol(packagename))))
-            package = getfield(Main, Symbol(packagename))
-        end
-    catch _
-        throw(ErrorException("Package $(packagename) not found"))
-    end
-
-    f = package
+    f = getfield(Main, Symbol(packagename))
     function_symbols = Symbol.(split(function_name, "."))
     for sym in function_symbols
         try

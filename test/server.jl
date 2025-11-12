@@ -46,12 +46,4 @@ end
     catch e
         @test occursin("Function MATFrost.nonExistentFunction not found", e.msg)
     end
-
-    # Test: non-existing package should throw error
-    callMeta = MATFrost._Server.CallMeta("NonExistentPackage.nonExistentFunction")
-    try
-        MATFrost._Server.getMethod(callMeta)
-    catch e
-        @test occursin("Package NonExistentPackage not found", e.msg)
-    end
 end
