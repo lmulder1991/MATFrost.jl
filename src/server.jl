@@ -120,9 +120,7 @@ Package: $(packagename)
 end
 
 function callsequence_latest_world_age(callmeta, callargs)
-    (f,method) = getMethod(callmeta)
-    Args = Tuple{method.sig.types[2:end]...}
-
+    (f,Args) = getMethod(callmeta)
     args = try
         _ConvertToJulia.convert_matfrostarray(Args, callargs)
     catch e
@@ -174,7 +172,7 @@ function getMethod(meta::CallMeta)
 
     if length(methods(f)) !== 1
         if isempty(meta.signature)
-            throw(MATFrostException("matfrostjulia:call:packageNotFound", 
+            throw(MATFrostException("matfrostjulia:call:multipleMethodDefinitions", 
                 ambiguous_method_error(f)
             ))
         else
@@ -194,8 +192,9 @@ function getMethod(meta::CallMeta)
     else
         method = methods(f)[1]
     end
-
-    return (f,method)
+    
+    Args = Tuple{method.sig.types[2:end]...}
+    return (f,Args)
 
 end
 
