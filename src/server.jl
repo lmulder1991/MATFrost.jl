@@ -146,14 +146,14 @@ function getMethod(meta::CallMeta)
     package = nothing
 
     try
-        package = getfield(Main, Symbol(packagename))
-    catch _
-        try
+        if package_is_loaded(Symbol(packagename))
+            package = getfield(Main, Symbol(packagename))
+        else
             Main.eval(:(import $(Symbol(packagename))))
             package = getfield(Main, Symbol(packagename))
-        catch _
-            throw(ErrorException("Package $(packagename) not found"))
         end
+    catch _
+        throw(ErrorException("Package $(packagename) not found"))
     end
 
     f = package
@@ -176,8 +176,16 @@ function getMethod(meta::CallMeta)
                 ambiguous_method_error(f)
             ))
         else
-            pattern = Regex("^$(function_symbols[end])\\($(meta.signature)\\)")
-            index = findfirst(m -> match(pattern, string(m)) !== nothing, methods(f))
+           # Use eval to parse the signature string into a Tuple type
+            # Example: "::Type{String}, marr::MATFrost._Types.MATFrostArrayAbstract"
+            # becomes Tuple{Type{String}, MATFrost._Types.MATFrostArrayAbstract}
+            sigstr = join(map(s -> begin
+                mtch = match(r"::([^,]+)", s)
+                mtch !== nothing ? strip(mtch.captures[1]) : strip(s)
+            end, split(meta.signature, ",")), ", ")
+            sigexpr = Meta.parse("Tuple{$sigstr}")
+            sigtype = eval(sigexpr)
+            index = findfirst(m -> Tuple{m.sig.types[2:end]...} == sigtype, methods(f))
             if index === nothing
                 error_msg = """
                 No matching method found for function $(f) with signature $(meta.signature).
