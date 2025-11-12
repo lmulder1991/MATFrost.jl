@@ -33,7 +33,7 @@ end
     @test err.id == "matfrostjulia:call:multipleMethodDefinitions"
 
     # Test: lower level function with many methods, specific signature
-    callMeta = MATFrost._Server.CallMeta("MATFrost._ConvertToJulia.convert_matfrostarray","::Type{String}, marr::MATFrost._Types.MATFrostArrayAbstract")
+    callMeta = MATFrost._Server.CallMeta("MATFrost._ConvertToJulia.convert_matfrostarray","Type{String}, MATFrost._Types.MATFrostArrayAbstract")
     (f,m) = MATFrost._Server.getMethod(callMeta)
     @test isa(f, Function)
     @test m==Tuple{Type{String}, MATFrost._Types.MATFrostArrayAbstract}

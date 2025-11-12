@@ -138,18 +138,19 @@ end
 
 
 function getMethod(meta::CallMeta)
+    # Parse fully qualified name
     m = match(r"^([^.]+)\.([^(]+)$", meta.fully_qualified_name)
     if m === nothing
-        throw("Incompatible fully_qualified_name")
+        throw(ErrorException("Incompatible fully_qualified_name: $(meta.fully_qualified_name)"))
     end
     (packagename, function_name) = m.captures
 
+    # Get function object
     f = getfield(Main, Symbol(packagename))
-    function_symbols = Symbol.(split(function_name, "."))
-    for sym in function_symbols
+    for sym in Symbol.(split(function_name, "."))
         try
             f = getfield(f, sym)
-        catch _
+        catch
             if isa(f, Function)
                 continue
             else
@@ -158,40 +159,48 @@ function getMethod(meta::CallMeta)
         end
     end
 
-    if length(methods(f)) !== 1
+    # Disambiguate methods
+    mtds = methods(f)
+    if length(mtds) != 1
         if isempty(meta.signature)
-            throw(MATFrostException("matfrostjulia:call:multipleMethodDefinitions", 
+            throw(MATFrostException(
+                "matfrostjulia:call:multipleMethodDefinitions",
                 ambiguous_method_error(f)
             ))
         else
-           # Use eval to parse the signature string into a Tuple type
-            # Example: "::Type{String}, marr::MATFrost._Types.MATFrostArrayAbstract"
-            # becomes Tuple{Type{String}, MATFrost._Types.MATFrostArrayAbstract}
-            sigstr = join(map(s -> begin
-                mtch = match(r"::([^,]+)", s)
-                mtch !== nothing ? strip(mtch.captures[1]) : strip(s)
-            end, split(meta.signature, ",")), ", ")
-            sigexpr = Meta.parse("Tuple{$sigstr}")
-            sigtype = eval(sigexpr)
-            index = findfirst(m -> Tuple{m.sig.types[2:end]...} == sigtype, methods(f))
+            # Parse signature as a Tuple type
+            sigexpr = Meta.parse(meta.signature)
+            sigtype = Main.eval(sigexpr)
+            index = findfirst(m -> begin
+                sig = Base.unwrap_unionall(m.sig)
+                if hasproperty(sig, :types)
+                    # Compare tuple types
+                    Tuple{sig.types[2:end]...} == Tuple{sigtype...}
+                else
+                    false
+                end
+            end, mtds)
+            # Use which to find the method
             if index === nothing
                 error_msg = """
                 No matching method found for function $(f) with signature $(meta.signature).
-                
+
                 Available methods:
-                $(methods(f))
+                $(mtds)
                 """
                 throw(ErrorException(error_msg))
             end
+            method = mtds[index]
         end
-        method = methods(f)[index]
     else
-        method = methods(f)[1]
+        method = mtds[1]
     end
-    
-    Args = Tuple{method.sig.types[2:end]...}
-    return (f,Args)
 
+    # Extract argument types from method signature
+    sig = Base.unwrap_unionall(method.sig)
+    Args = Tuple{sig.types[2:end]...}
+
+    return (f, Args)
 end
 
 function matfrostinputconversionexception(e::MATFrostConversionException)
