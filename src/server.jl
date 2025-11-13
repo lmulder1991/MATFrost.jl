@@ -159,48 +159,24 @@ function getMethod(meta::CallMeta)
         end
     end
 
-    # Disambiguate methods
     mtds = methods(f)
-    if length(mtds) != 1
-        if isempty(meta.signature)
+    if !isempty(meta.signature)
+        # Use the signature directly to construct argument types
+        sigexpr = Meta.parse("Tuple{" * meta.signature * "}")
+        Args = Main.eval(sigexpr)
+        return (f, Args)
+    else
+        if length(mtds) == 1
+            sig = Base.unwrap_unionall(mtds[1].sig)
+            Args = Tuple{sig.types[2:end]...}
+            return (f, Args)
+        else
             throw(MATFrostException(
                 "matfrostjulia:call:multipleMethodDefinitions",
                 ambiguous_method_error(f)
             ))
-        else
-            # Parse signature as a Tuple type
-            sigexpr = Meta.parse(meta.signature)
-            sigtype = Main.eval(sigexpr)
-            index = findfirst(m -> begin
-                sig = Base.unwrap_unionall(m.sig)
-                if hasproperty(sig, :types)
-                    # Compare tuple types
-                    Tuple{sig.types[2:end]...} == Tuple{sigtype...}
-                else
-                    false
-                end
-            end, mtds)
-            # Use which to find the method
-            if index === nothing
-                error_msg = """
-                No matching method found for function $(f) with signature $(meta.signature).
-
-                Available methods:
-                $(mtds)
-                """
-                throw(ErrorException(error_msg))
-            end
-            method = mtds[index]
         end
-    else
-        method = mtds[1]
     end
-
-    # Extract argument types from method signature
-    sig = Base.unwrap_unionall(method.sig)
-    Args = Tuple{sig.types[2:end]...}
-
-    return (f, Args)
 end
 
 function matfrostinputconversionexception(e::MATFrostConversionException)
